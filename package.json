@@ -9,7 +9,11 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
-    "@nuxt/content": "^3.12.0",
+    "fabric": "^7.2.0",
+    "jspdf": "^4.2.1",
     "nuxt": "^4.4.2"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0"
   }
 }
