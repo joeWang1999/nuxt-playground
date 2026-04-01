@@ -9,7 +9,7 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
-    "fabric": "^7.2.0",
+    "fabric": "^6.9.1",
     "jspdf": "^4.2.1",
     "nuxt": "^4.4.2"
   },
