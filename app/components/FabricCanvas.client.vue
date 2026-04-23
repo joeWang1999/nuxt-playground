@@ -29,36 +29,49 @@
 
       <!-- 側邊工具列 -->
       <div class="mb-4 ml-auto flex w-56 shrink-0 flex-col gap-8">
-
-        <!-- 畫布規格選擇 -->
-        <div class="flex flex-col gap-2">
-          <p class="text-sm text-gray-500 font-medium">建立畫布</p>
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              v-for="preset in PRESETS"
-              :key="preset.label"
-              @click="createCanvasFromPreset(preset)"
-              :class="[
-                'px-3 py-2 text-sm rounded border transition-colors',
-                currentPreset?.label === preset.label
-                  ? 'bg-gray-700 text-white border-gray-700'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100',
-              ]"
-            >
-              {{ preset.label }}
-            </button>
-          </div>
-        </div>
-
         <!-- 物件操作 -->
         <div class="flex flex-col gap-4">
-          <!-- 上傳圖片 -->
+          <!-- 上傳底圖建立畫布 -->
+          <p class="text-sm text-gray-600 font-medium">上傳畫框（建立畫布）</p>
           <input
             type="file"
             accept="image/*"
-            @change="uploadImage"
+            @change="uploadFrameImage"
             class="px-4 py-2 border rounded text-sm"
           />
+          <p class="text-sm text-gray-600 font-medium">上傳姓名貼底圖（匯出時橫向 4 連貼）</p>
+          <input
+            type="file"
+            accept="image/*"
+            @change="uploadNameStickerFrameImage"
+            class="px-4 py-2 border rounded text-sm"
+          />
+          <!-- 上傳照片（放在畫框下方，可編輯） -->
+          <p class="text-sm text-gray-600 font-medium">上傳照片（置於畫框下方）</p>
+          <input
+            type="file"
+            accept="image/*"
+            @change="uploadPhotoImage"
+            class="px-4 py-2 border rounded text-sm"
+          />
+          <!-- 姓名貼設定 -->
+          <p class="text-sm text-gray-600 font-medium">姓名貼設定</p>
+          <div class="flex flex-col gap-1">
+            <label class="text-sm text-gray-600" for="sticker-name-input">姓名</label>
+            <input
+              id="sticker-name-input"
+              v-model="stickerName"
+              type="text"
+              placeholder="請輸入姓名"
+              class="px-4 py-2 border rounded text-sm"
+            />
+          </div>
+          <button
+            @click="generateNameStickers"
+            class="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-800"
+          >
+            產生姓名文字框
+          </button>
           <!-- 新增文字 -->
           <button
             @click="addText('可編輯文字', 80, 80)"
@@ -72,6 +85,13 @@
             class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
             匯出 PDF
+          </button>
+          <button
+            @click="duplicateSelectedObject"
+            :disabled="!activeObject"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40"
+          >
+            複製選取物件
           </button>
 
           <!-- 上一步 / 下一步 -->
@@ -166,18 +186,22 @@ import * as fabric from 'fabric'
 const canvasEl = ref(null)
 const canvasContainerEl = ref(null)
 let canvas = null
+const frameObject = ref(null)
 
 // ─── Selection State ──────────────────────────────────────────────────────────
 const activeIsText = ref(false)   // 目前選取的物件是否為文字框
 const activeObject = ref(null)    // 目前選取的物件
 
 // ─── Text Style ───────────────────────────────────────────────────────────────
-const fontSize = ref(28)
-const fontColor = ref('#222222')
+const fontSize = ref(24)
+const DEFAULT_TEXT_COLOR = '#222222'
+const fontColor = ref(DEFAULT_TEXT_COLOR)
 const fontFamily = ref('Arial')
 const fontBold = ref(false)
 const fontItalic = ref(false)
 const fontUnderline = ref(false)
+const stickerName = ref('')
+const TEXTBOX_PADDING_PX = 4
 
 const FONT_FAMILIES = ['Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Helvetica', 'Tahoma']
 
@@ -192,19 +216,9 @@ const canvasInternalW = ref(800)
 const canvasInternalH = ref(500)
 const canvasDisplayW = ref(800)
 const canvasDisplayH = ref(500)
-
-// ─── Paper Presets ────────────────────────────────────────────────────────────
-// 畫布以 pt 為顯示尺寸；匯出 PDF 時透過 multiplier 提升至 300 DPI
-const PRESETS = [
-  { label: 'A4 橫向',  canvasW: 841,  canvasH: 595,  pdfOrientation: 'landscape', pdfFormat: 'a4',           pageWmm: 297,   pageHmm: 210   },
-  { label: 'A4 直向',  canvasW: 595,  canvasH: 841,  pdfOrientation: 'portrait',  pdfFormat: 'a4',           pageWmm: 210,   pageHmm: 297   },
-  { label: 'A3 橫向',  canvasW: 1190, canvasH: 842,  pdfOrientation: 'landscape', pdfFormat: 'a3',           pageWmm: 420,   pageHmm: 297   },
-  { label: 'A3 直向',  canvasW: 842,  canvasH: 1190, pdfOrientation: 'portrait',  pdfFormat: 'a3',           pageWmm: 297,   pageHmm: 420   },
-  { label: '4×6 橫向', canvasW: 432,  canvasH: 288,  pdfOrientation: 'landscape', pdfFormat: [152.4, 101.6], pageWmm: 152.4, pageHmm: 101.6 },
-  { label: '4×6 直向', canvasW: 288,  canvasH: 432,  pdfOrientation: 'portrait',  pdfFormat: [101.6, 152.4], pageWmm: 101.6, pageHmm: 152.4 },
-]
-const currentPreset = ref(null)
 const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024
+const NAME_STICKER_EXPORT_COPIES = 4
+const frameType = ref('general')
 
 // ─── Custom Control Icons ─────────────────────────────────────────────────────
 const iconDelete = new Image()
@@ -314,7 +328,31 @@ function updateTextStyle() {
     fontStyle: fontItalic.value ? 'italic' : 'normal',
     underline: fontUnderline.value,
   })
+  fitTextboxToText(obj)
   canvas.renderAll()
+}
+
+/**
+ * 讓文字框尺寸貼合目前文字內容，並保留固定內距
+ */
+function fitTextboxToText(textbox) {
+  if (!textbox || textbox.type !== 'textbox') return
+
+  const text = textbox.text?.length ? textbox.text : ' '
+  const probe = new fabric.Text(text, {
+    fontSize: Number(textbox.fontSize) || 24,
+    fontFamily: textbox.fontFamily || 'Arial',
+    fontWeight: textbox.fontWeight || 'normal',
+    fontStyle: textbox.fontStyle || 'normal',
+    underline: !!textbox.underline,
+  })
+
+  const fittedWidth = Math.max((probe.width || 0) + TEXTBOX_PADDING_PX * 2, TEXTBOX_PADDING_PX * 2 + 1)
+
+  textbox.set({
+    width: fittedWidth,
+    padding: TEXTBOX_PADDING_PX,
+  })
 }
 
 /** 切換粗體 */
@@ -346,30 +384,135 @@ const addText = (val, x, y) => {
   addObject(new fabric.Textbox(val || '可編輯文字', {
     left: x ?? 80,
     top: y ?? 80,
-    fontSize: 28,
-    fill: '#222222',
+    fontSize: 24,
+    fill: DEFAULT_TEXT_COLOR,
     originX: 'left',
     originY: 'top',
   }))
 }
 
 /**
- * 從 URL 載入圖片並等比縮放後放入畫布
+ * 依姓名建立一個可編輯姓名文字框
  */
-const addImageFromUrl = async (url) => {
-  if (!canvas || !url) return
-  const img = await fabric.Image.fromURL(url, { crossOrigin: 'anonymous' })
-  const maxWidth = canvas.getWidth() * 0.35
-  const maxHeight = canvas.getHeight() * 0.35
-  const scale = Math.min(maxWidth / (img.width || 1), maxHeight / (img.height || 1), 1)
-  img.set({ left: 150, top: 100, scaleX: scale, scaleY: scale })
-  addObject(img)
+const generateNameStickers = () => {
+  if (!canvas || !frameObject.value) {
+    alert('請先上傳姓名貼底圖')
+    return
+  }
+
+  const name = stickerName.value.trim()
+
+  if (!name) {
+    alert('請先輸入姓名')
+    return
+  }
+
+  const textbox = new fabric.Textbox(name, {
+    left: canvas.getWidth() / 2,
+    top: canvas.getHeight() / 2,
+    width: 1,
+    fontSize: Number(fontSize.value),
+    fill: DEFAULT_TEXT_COLOR,
+    fontFamily: fontFamily.value,
+    fontWeight: fontBold.value ? 'bold' : 'normal',
+    fontStyle: fontItalic.value ? 'italic' : 'normal',
+    underline: fontUnderline.value,
+    textAlign: 'center',
+    originX: 'center',
+    originY: 'center',
+    splitByGrapheme: true,
+    padding: TEXTBOX_PADDING_PX,
+  })
+
+  fitTextboxToText(textbox)
+  addObject(textbox)
+}
+
+/**
+ * 讀取圖片原始寬高，供建立畫布尺寸使用
+ */
+const getImageSize = (imageUrl) => {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve({ width: image.width, height: image.height })
+    image.onerror = reject
+    image.src = imageUrl
+  })
+}
+
+/**
+ * 將照片物件固定放在畫框下方，避免蓋過畫框
+ */
+const placePhotoBelowFrame = (photo) => {
+  if (!canvas || !frameObject.value || !photo) return
+  const frameIndex = canvas.getObjects().indexOf(frameObject.value)
+  canvas.moveObjectTo(photo, Math.max(frameIndex - 1, 0))
+}
+
+/**
+ * 以上傳圖片建立畫布，並將圖片放在底層作為底圖
+ */
+const createCanvasFromBackground = async (imageUrl, nextFrameType = 'general') => {
+  if (!imageUrl) return
+
+  const frame = await fabric.Image.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+  const width = frame.width || 800
+  const height = frame.height || 500
+
+  createCanvas(width, height)
+
+  frame.set({
+    left: 0,
+    top: 0,
+    scaleX: 1,
+    scaleY: 1,
+    selectable: false,
+    evented: false,
+    hasControls: false,
+    hasBorders: false,
+  })
+
+  frameObject.value = frame
+  frameType.value = nextFrameType
+  canvas.add(frame)
+  canvas.discardActiveObject()
+  canvas.renderAll()
+  saveState()
+}
+
+/**
+ * 新增可編輯照片並放在畫框下方
+ */
+const addPhotoToCanvas = async (imageUrl) => {
+  if (!canvas || !imageUrl) return
+
+  const photo = await fabric.Image.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+  const maxWidth = canvas.getWidth() * 0.9
+  const maxHeight = canvas.getHeight() * 0.9
+  const scale = Math.min(maxWidth / (photo.width || 1), maxHeight / (photo.height || 1), 1)
+
+  photo.set({
+    left: Math.max((canvas.getWidth() - (photo.width || 1) * scale) / 2, 0),
+    top: Math.max((canvas.getHeight() - (photo.height || 1) * scale) / 2, 0),
+    scaleX: scale,
+    scaleY: scale,
+    objectRole: 'photo',
+  })
+
+  addObject(photo)
+
+  if (frameObject.value) {
+    placePhotoBelowFrame(photo)
+    canvas.renderAll()
+  }
+
+  saveState()
 }
 
 /**
  * 處理本機圖片上傳，驗證最小尺寸後加入畫布
  */
-const uploadImage = (e) => {
+const uploadFrameImage = (e) => {
   const file = e.target.files[0]
   if (!file) return
 
@@ -378,21 +521,71 @@ const uploadImage = (e) => {
     try {
       const imageUrl = String(reader.result || '')
       // 驗證最小解析度
-      const size = await new Promise((resolve, reject) => {
-        const image = new Image()
-        image.onload = () => resolve({ width: image.width, height: image.height })
-        image.onerror = reject
-        image.src = imageUrl
-      })
+      const size = await getImageSize(imageUrl)
       if (size.width < 200 || size.height < 200) {
         alert('檔案解析度差，請上傳至少 200x200px 的圖片')
         e.target.value = ''
         return
       }
-      await addImageFromUrl(imageUrl)
+      await createCanvasFromBackground(imageUrl, 'general')
+      e.target.value = ''
     } catch (err) {
-      console.error('Upload image failed:', err)
+      console.error('Upload frame failed:', err)
       alert('圖片載入失敗，請確認檔案格式')
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
+/**
+ * 處理姓名貼底圖上傳，匯出 PDF 時會啟用橫向 4 連貼
+ */
+const uploadNameStickerFrameImage = (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = async () => {
+    try {
+      const imageUrl = String(reader.result || '')
+      const size = await getImageSize(imageUrl)
+      if (size.width < 200 || size.height < 200) {
+        alert('檔案解析度差，請上傳至少 200x200px 的圖片')
+        e.target.value = ''
+        return
+      }
+      await createCanvasFromBackground(imageUrl, 'name-sticker')
+      e.target.value = ''
+    } catch (err) {
+      console.error('Upload name sticker frame failed:', err)
+      alert('圖片載入失敗，請確認檔案格式')
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
+/**
+ * 上傳照片並插入在畫框下方（可移動、縮放、旋轉）
+ */
+const uploadPhotoImage = (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+
+  if (!frameObject.value) {
+    alert('請先上傳畫框底圖，再上傳照片')
+    e.target.value = ''
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = async () => {
+    try {
+      const imageUrl = String(reader.result || '')
+      await addPhotoToCanvas(imageUrl)
+      e.target.value = ''
+    } catch (err) {
+      console.error('Upload photo failed:', err)
+      alert('照片載入失敗，請確認檔案格式')
     }
   }
   reader.readAsDataURL(file)
@@ -406,6 +599,9 @@ const uploadImage = (e) => {
 const bringForward = () => {
   const obj = canvas.getActiveObject()
   if (!obj) return
+
+  if (frameObject.value && obj === frameObject.value) return
+
   canvas.moveObjectTo(obj, canvas.getObjects().indexOf(obj) + 1)
   canvas.renderAll()
   saveState()
@@ -415,7 +611,45 @@ const bringForward = () => {
 const sendBackward = () => {
   const obj = canvas.getActiveObject()
   if (!obj) return
+
+  if (frameObject.value && obj === frameObject.value) return
+
   canvas.moveObjectTo(obj, canvas.getObjects().indexOf(obj) - 1)
+  if (obj.objectRole === 'photo') {
+    placePhotoBelowFrame(obj)
+  }
+  canvas.renderAll()
+  saveState()
+}
+
+/** 複製目前選取物件（支援單一與多選） */
+const duplicateSelectedObject = async () => {
+  const selectedObjects = canvas?.getActiveObjects?.() || []
+  if (!selectedObjects.length) return
+
+  const duplicated = []
+  canvas.discardActiveObject()
+
+  for (const source of selectedObjects) {
+    const cloned = await source.clone()
+    cloned.set({
+      left: (cloned.left || 0) + 20,
+      top: (cloned.top || 0) + 20,
+    })
+    applyCustomControls(cloned)
+    canvas.add(cloned)
+    if (cloned.objectRole === 'photo') {
+      placePhotoBelowFrame(cloned)
+    }
+    duplicated.push(cloned)
+  }
+
+  if (duplicated.length === 1) {
+    canvas.setActiveObject(duplicated[0])
+  } else if (duplicated.length > 1) {
+    canvas.setActiveObject(new fabric.ActiveSelection(duplicated, { canvas }))
+  }
+
   canvas.renderAll()
   saveState()
 }
@@ -427,28 +661,34 @@ const sendBackward = () => {
 /**
  * 依指定 DPI 與 JPEG 品質建立 PDF Blob，供大小判斷與最終下載使用
  */
-const buildPdfBlob = (preset, dpi, imageQuality) => {
+const buildPdfBlob = async (pageSpec, dpi, imageQuality, exportCopies = 1) => {
   const MM_PER_INCH = 25.4
-  const { pageWmm, pageHmm } = preset
+  const { pageWmm, pageHmm, pdfOrientation, pdfFormat } = pageSpec
+  const exportWidth = canvas.getWidth() * exportCopies
+  const exportHeight = canvas.getHeight()
 
   const multiplier = Math.min(
-    Math.round((pageWmm / MM_PER_INCH) * dpi) / canvas.getWidth(),
-    Math.round((pageHmm / MM_PER_INCH) * dpi) / canvas.getHeight(),
+    Math.round((pageWmm / MM_PER_INCH) * dpi) / exportWidth,
+    Math.round((pageHmm / MM_PER_INCH) * dpi) / exportHeight,
   )
 
-  const imgData = canvas.toDataURL({
+  const baseImgData = canvas.toDataURL({
     format: 'jpeg',
     quality: imageQuality,
     multiplier,
   })
 
+  const imgData = exportCopies > 1
+    ? await buildRepeatedImageData(baseImgData, exportCopies, imageQuality)
+    : baseImgData
+
   const pdf = new jsPDF({
-    orientation: preset.pdfOrientation,
+    orientation: pdfOrientation,
     unit: 'mm',
-    format: preset.pdfFormat,
+    format: pdfFormat,
   })
 
-  const canvasRatio = canvas.getWidth() / canvas.getHeight()
+  const canvasRatio = exportWidth / exportHeight
   const pageRatio = pageWmm / pageHmm
   let imgW, imgH, offsetX, offsetY
 
@@ -469,14 +709,61 @@ const buildPdfBlob = (preset, dpi, imageQuality) => {
 }
 
 /**
+ * 將單一畫布影像橫向重複指定次數，回傳合併後 JPEG data URL
+ */
+const buildRepeatedImageData = (baseImgData, copies, imageQuality) => {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => {
+      const composedCanvas = document.createElement('canvas')
+      composedCanvas.width = image.width * copies
+      composedCanvas.height = image.height
+      const ctx = composedCanvas.getContext('2d')
+
+      if (!ctx) {
+        reject(new Error('無法建立合成畫布'))
+        return
+      }
+
+      for (let i = 0; i < copies; i += 1) {
+        ctx.drawImage(image, image.width * i, 0)
+      }
+
+      resolve(composedCanvas.toDataURL('image/jpeg', imageQuality))
+    }
+    image.onerror = () => reject(new Error('合成影像失敗'))
+    image.src = baseImgData
+  })
+}
+
+/**
+ * 依目前畫布尺寸推算 PDF 頁面尺寸（72 DPI 對應 pt）
+ */
+const getPageSpecFromCanvas = (widthMultiplier = 1) => {
+  const MM_PER_INCH = 25.4
+  const PT_PER_INCH = 72
+  const pageWmm = ((canvas.getWidth() * widthMultiplier) / PT_PER_INCH) * MM_PER_INCH
+  const pageHmm = (canvas.getHeight() / PT_PER_INCH) * MM_PER_INCH
+
+  return {
+    pageWmm,
+    pageHmm,
+    pdfOrientation: pageWmm >= pageHmm ? 'landscape' : 'portrait',
+    pdfFormat: [pageWmm, pageHmm],
+  }
+}
+
+/**
  * 將畫布內容匯出為 PDF，若超過 20MB 會自動降低 DPI 與品質直到符合上限
  */
 const exportPDF = async () => {
-  const preset = currentPreset.value
-  if (!preset) {
-    alert('請先選擇畫布規格')
+  if (!canvas) {
+    alert('目前沒有可匯出的畫布')
     return
   }
+
+  const exportCopies = frameType.value === 'name-sticker' ? NAME_STICKER_EXPORT_COPIES : 1
+  const pageSpec = getPageSpecFromCanvas(exportCopies)
 
   // 由高到低嘗試參數，優先保留畫質，必要時才進一步壓縮
   const candidates = [
@@ -491,7 +778,7 @@ const exportPDF = async () => {
 
   let selectedBlob = null
   for (const candidate of candidates) {
-    const blob = buildPdfBlob(preset, candidate.dpi, candidate.quality)
+    const blob = await buildPdfBlob(pageSpec, candidate.dpi, candidate.quality, exportCopies)
     selectedBlob = blob
     if (blob.size <= MAX_PDF_SIZE_BYTES) {
       break
@@ -503,7 +790,7 @@ const exportPDF = async () => {
     return
   }
 
-  const filename = `canvas-${preset.label}.pdf`
+  const filename = `canvas-${canvas.getWidth()}x${canvas.getHeight()}.pdf`
   const file = new File([selectedBlob], filename, { type: 'application/pdf' })
   const url = URL.createObjectURL(file)
   const a = document.createElement('a')
@@ -527,22 +814,17 @@ const exportPDF = async () => {
 const addObject = (obj) => {
   applyCustomControls(obj)
   canvas.add(obj)
+  if (obj.objectRole === 'photo') {
+    placePhotoBelowFrame(obj)
+  }
   canvas.setActiveObject(obj)
   canvas.renderAll()
   saveState()
 }
 
 /* ============================================================
-   Create Canvas from Preset
-   ============================================================ */
-
-/**
- * 依選擇的規格重建畫布（舊畫布會被清除）
- */
-function createCanvasFromPreset(preset) {
-  currentPreset.value = preset
-  createCanvas(preset.canvasW, preset.canvasH)
-}
+  Create Canvas
+  ============================================================ */
 
 /**
  * 初始化 Fabric Canvas
@@ -550,6 +832,7 @@ function createCanvasFromPreset(preset) {
  */
 function createCanvas(width, height) {
   canvas?.dispose()
+  frameObject.value = null
   updateCanvasScale(width, height)
 
   canvas = new fabric.Canvas(canvasEl.value, {
@@ -578,6 +861,12 @@ function bindCanvasEvents() {
     activeIsText.value = false
   })
   canvas.on('object:modified', () => saveState())
+  canvas.on('text:changed', (event) => {
+    const target = event?.target
+    if (!target || target.type !== 'textbox') return
+    fitTextboxToText(target)
+    canvas.requestRenderAll()
+  })
 }
 
 /* ============================================================
@@ -643,19 +932,8 @@ function applyCustomControls(obj) {
    Lifecycle
    ============================================================ */
 onMounted(() => {
-  // 初始建立空白畫布（無尺寸），待載入預設規格後重建
-  canvas = new fabric.Canvas(canvasEl.value, {
-    backgroundColor: '#ffffff',
-    selection: true,
-    preserveObjectStacking: true,
-  })
-
-  bindCanvasEvents()
-  saveState()
-
-  // 預設套用 4x6 橫向規格
-  const defaultPreset = PRESETS.find(p => p.label === '4×6 橫向')
-  if (defaultPreset) createCanvasFromPreset(defaultPreset)
+  // 先建立預設空白畫布，後續可由上傳底圖重建為圖片尺寸
+  createCanvas(800, 500)
 
   // 視窗 resize 時重新計算顯示縮放
   const onResize = () => {
