@@ -1,5 +1,3 @@
 <template>
-    123321
+  <FabricCanvas />
 </template>
-<script setup lang="ts">
-</script>

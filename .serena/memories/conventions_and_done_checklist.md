@@ -1,0 +1,3 @@
+- Conventions observed: Vue SFC components in app/components; route pages in app/pages; shared logic in composables.
+- Naming: PascalCase for component files, kebab-case for route files, composables prefixed with use*.
+- Task done checklist: run npm run build (or at least npm run dev smoke check) and verify edited canvas interactions manually in browser.

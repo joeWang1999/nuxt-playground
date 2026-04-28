@@ -1,0 +1,4 @@
+- Purpose: Nuxt playground focused on interactive canvas editors (Fabric.js) for DIY frame and name sticker workflows.
+- Stack: Nuxt 4 (Vue 3), Fabric.js, jsPDF, Tailwind CSS module, lucide-vue-next icons.
+- Structure: app/pages for routes, app/components for UI/canvas components, app/composables for shared canvas logic, public/icons for static assets.
+- Runtime: Node.js with npm scripts in package.json.

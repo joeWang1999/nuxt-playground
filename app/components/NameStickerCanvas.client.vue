@@ -1,5 +1,4 @@
-﻿
-<template>
+﻿<template>
   <div class="flex h-screen flex-col bg-[#ECECEC] text-[#2C2C2C]" style="font-family: 'PingFang TC', sans-serif">
     <!-- 頂部工具列 -->
     <div class="relative z-50 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm">
@@ -48,7 +47,7 @@
       </div>
     </div>
 
-    <!-- 主內容區：左側圖示欄＋浮動面板＋畫布 -->
+    <!-- 主要內容區：左側選單 + 右側畫布 -->
     <div class="relative flex flex-1 overflow-hidden">
       <!-- Sidebar Icons -->
       <div class="relative z-40 flex w-[90px] shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 shadow-sm">
@@ -77,13 +76,13 @@
         </div>
 
         <div class="flex-1 overflow-y-auto p-6">
-          <!-- 畫框上傳 -->
+          <!-- 底圖上傳 -->
           <div v-if="activePanel === 'background'" class="space-y-4">
-            <p class="text-sm text-gray-500">上傳畫框（建立畫布）</p>
+            <p class="text-sm text-gray-500">上傳姓名貼底圖以建立畫布</p>
             <input
               type="file"
               accept="image/*"
-              @change="uploadFrameImage"
+              @change="uploadNameStickerFrameImage"
               class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm transition focus:border-[#0078C8] focus:outline-none"
             />
           </div>
@@ -101,48 +100,91 @@
 
           <!-- 文字新增與編輯 -->
           <div v-else-if="activePanel === 'text'" class="flex h-full flex-col">
-            <button
-              @click="addText('可編輯文字', 80, 80, () => { activePanel = null })"
-              class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-[16px] font-bold text-[#0078c9] transition hover:bg-gray-50"
-            >
-              新增文字
-            </button>
+            <!-- 姓名貼設定 -->
+            <div class="mb-6 shrink-0 border-b border-gray-200 pb-6">
+              <h3 class="mb-3 text-sm font-bold text-[#2C2C2C]">姓名貼設定</h3>
+              <div class="mb-3 flex items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 transition-colors focus-within:border-[#0078C8]">
+                <input
+                  id="sticker-name-input"
+                  v-model="stickerName"
+                  type="text"
+                  placeholder="請輸入姓名"
+                  class="w-full border-none bg-transparent text-sm text-[#2C2C2C] focus:outline-none"
+                />
+              </div>
+              <button
+                @click="generateNameStickers"
+                class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-[16px] font-bold text-[#0078c9] transition hover:bg-gray-50"
+              >
+                產生姓名文字框
+              </button>
+            </div>
+
+            <!-- 文字樣式編輯（選取文字框時顯示） -->
+            <template v-if="activeIsText">
+              <h3 class="mb-3 text-sm font-bold text-[#2C2C2C]">文字樣式</h3>
+              <TextStyleToolbar
+                v-model:fontFamily="fontFamily"
+                v-model:fontSize="fontSize"
+                v-model:fontColor="fontColor"
+                :fontBold="fontBold"
+                :fontItalic="fontItalic"
+                :fontUnderline="fontUnderline"
+                :fontFamilies="FONT_FAMILIES"
+                @style-change="updateTextStyle"
+                @toggle-bold="toggleBold"
+                @toggle-italic="toggleItalic"
+                @toggle-underline="toggleUnderline"
+              />
+              <button
+                @click="applyStyleToAll"
+                class="mt-4 flex w-full items-center justify-center rounded-[100px] bg-[#0078c9] py-2.5 text-[16px] font-bold text-white transition hover:bg-[#0060a0]"
+              >
+                套用編輯至全部
+              </button>
+            </template>
+          </div>
+
+          <!-- 圖層 -->
+          <div v-else-if="activePanel === 'layers'" class="space-y-3">
+            <div class="flex flex-col gap-2">
+              <button
+                @click="bringForward"
+                :disabled="!activeObject"
+                class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+              >
+                ↑ 往上一層
+              </button>
+              <button
+                @click="sendBackward"
+                :disabled="!activeObject"
+                class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+              >
+                ↓ 往下一層
+              </button>
+            </div>
+            <div class="my-2 h-px w-full bg-gray-200" />
             <button
               @click="duplicateSelectedObject"
               :disabled="!activeObject"
-              class="mt-3 flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-sm font-bold text-[#0078c9] transition hover:bg-gray-50 disabled:opacity-40"
+              class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-sm font-bold text-[#0078c9] transition hover:bg-gray-50 disabled:opacity-40"
             >
               複製選取物件
             </button>
-          </div>
-
-          <!-- 物件列表/圖層 -->
-          <div v-else-if="activePanel === 'layers'" class="space-y-3">
-            <div class="w-full">
-              <div class="flex gap-2 mb-3">
-                <button
-                  @click="bringForward"
-                  :disabled="!activeObject"
-                  class="flex-1 flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-                >
-                  ↑ 往上一層
-                </button>
-                <button
-                  @click="sendBackward"
-                  :disabled="!activeObject"
-                  class="flex-1 flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-                >
-                  ↓ 往下一層
-                </button>
-              </div>
-              <CanvasObjectList
-                :objects="canvasObjects"
-                :activeIndex="activeObjectIndex"
-                @focus="focusObject"
-                @remove="removeObjectFromCanvas"
-                class="w-full"
-              />
-            </div>
+            <button
+              @click="alignLeft"
+              :disabled="!activeObject"
+              class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+            >
+              靠左對齊
+            </button>
+            <button
+              @click="alignTop"
+              :disabled="!activeObject"
+              class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+            >
+              靠上對齊
+            </button>
           </div>
         </div>
       </div>
@@ -177,54 +219,6 @@
       </div>
     </div>
 
-    <!-- 文字編輯工具列（選取文字框時顯示，懸浮於畫布上方） -->
-    <div
-      v-if="activeIsText"
-      class="fixed left-1/2 z-50 flex flex-wrap items-center gap-4 p-3 bg-gray-100 rounded-xl shadow-xl border border-gray-200"
-      style="top: 90px; transform: translateX(-50%); min-width: 420px; max-width: 90vw;"
-    >
-      <div>
-        <label class="text-sm text-gray-600">字型</label>
-        <select v-model="fontFamily" @change="updateTextStyle" class="border rounded p-1">
-          <option v-for="f in FONT_FAMILIES" :key="f" :value="f">{{ f }}</option>
-        </select>
-      </div>
-      <div>
-        <label class="text-sm text-gray-600">字體大小</label>
-        <input
-          type="number"
-          min="10"
-          max="120"
-          v-model="fontSize"
-          @input="updateTextStyle"
-          class="border rounded p-1 w-20"
-        />
-      </div>
-      <div>
-        <label class="text-sm text-gray-600">顏色</label>
-        <input
-          type="color"
-          v-model="fontColor"
-          @input="updateTextStyle"
-          class="w-10 h-8 p-0 border rounded"
-        />
-      </div>
-      <div class="flex gap-1">
-        <button
-          @click="toggleBold"
-          :class="['w-8 h-8 rounded border font-bold text-sm transition-colors', fontBold ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
-        >B</button>
-        <button
-          @click="toggleItalic"
-          :class="['w-8 h-8 rounded border italic text-sm transition-colors', fontItalic ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
-        >I</button>
-        <button
-          @click="toggleUnderline"
-          :class="['w-8 h-8 rounded border underline text-sm transition-colors', fontUnderline ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
-        >U</button>
-      </div>
-    </div>
-
     <!-- 預覽彈窗 -->
     <div
       v-if="isPreviewOpen"
@@ -254,8 +248,6 @@
   />
 </template>
 
-
-
 <script setup lang="ts">
 import CanvasZoomControl from './CanvasZoomControl.vue'
 import { computed, ref } from 'vue'
@@ -267,7 +259,7 @@ const togglePanel = (panel: string) => {
 }
 
 const sidebarItems = [
-  { id: 'background', icon: '🖼️', label: '畫框上傳' },
+  { id: 'background', icon: '🖼️', label: '底圖上傳' },
   { id: 'image', icon: '📷', label: '照片上傳' },
   { id: 'text', icon: '✏️', label: '文字編輯' },
   { id: 'layers', icon: '📚', label: '圖層' },
@@ -292,6 +284,7 @@ const {
   fontBold,
   fontItalic,
   fontUnderline,
+  stickerName,
   FONT_FAMILIES,
   undoStack,
   redoStack,
@@ -306,21 +299,21 @@ const {
   toggleItalic,
   toggleUnderline,
   addText,
-  uploadFrameImage,
+  generateNameStickers,
+  uploadNameStickerFrameImage,
   uploadPhotoImage,
   bringForward,
   sendBackward,
   duplicateSelectedObject,
-  canvasObjects,
-  activeObjectIndex,
-  focusObject,
-  removeObjectFromCanvas,
+  alignLeft,
+  alignTop,
+  applyStyleToAll,
   undo,
   redo,
   loadPersistedState,
   getCanvasPreviewDataUrl,
   exportPDF,
-} = useFabricCanvas({ storageKey: 'fabric-canvas-state:general' })
+} = useFabricCanvas({ storageKey: 'fabric-canvas-state:name-sticker' })
 
 const openPreview = () => {
   const url = getCanvasPreviewDataUrl()

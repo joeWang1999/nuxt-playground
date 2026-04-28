@@ -11,6 +11,7 @@
   "dependencies": {
     "fabric": "^6.9.1",
     "jspdf": "^4.2.1",
+    "lucide-vue-next": "^0.511.0",
     "nuxt": "^4.4.2"
   },
   "devDependencies": {

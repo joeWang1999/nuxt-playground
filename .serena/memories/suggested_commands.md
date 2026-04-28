@@ -1,0 +1,6 @@
+- Install deps: npm install
+- Dev server: npm run dev
+- Production build: npm run build
+- Static generate: npm run generate
+- Preview build: npm run preview
+- Windows shell basics: Get-ChildItem, Set-Location, Get-Content, Select-String, git status, git diff
