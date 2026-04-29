@@ -120,7 +120,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const fontSize = ref<number>(64)
   const DEFAULT_TEXT_COLOR = '#222222'
   const fontColor = ref<string>(DEFAULT_TEXT_COLOR)
-  const fontFamily = ref<string>('Arial')
+  const fontFamily = ref<string>('Noto Sans TC')
   const fontBold = ref<boolean>(false)
   const fontItalic = ref<boolean>(false)
   const fontUnderline = ref<boolean>(false)
@@ -154,7 +154,16 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
   // 工具列可選的字型清單
   const FONT_FAMILIES: readonly string[] = [
-    'Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Helvetica', 'Tahoma',
+    'Arial',
+    'Georgia',
+    'Times New Roman',
+    'Courier New',
+    'Verdana',
+    'Helvetica',
+    'Tahoma',
+    'Noto Sans TC',
+    'Noto Serif TC',
+    'Raleway', // 新增
   ]
 
   // Undo / Redo 堆疊與批次模式旗標（批次模式下不會記錄歷史）
@@ -164,7 +173,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const hasPersistedState = ref<boolean>(false)       // 是否有儲存於 localStorage 的狀態
 
   // 物件清單（給側邊欄使用）與目前選取的索引
-  const canvasObjects: ShallowRef<FabricObj[]> = shallowRef<FabricObj[]>([])
+  // canvasObjects 改為帶 displayName 的物件
+  const canvasObjects: ShallowRef<Array<FabricObj & { displayName: string }>> = shallowRef([])
   const activeObjectIndex = ref<number>(-1)
 
   // ============================================================
@@ -178,12 +188,41 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       activeObjectIndex.value = -1
       return
     }
+    // 修正：編輯中的 textbox 也要顯示在列表上
     const reversed = [...canvas.getObjects()]
-      .filter(obj => obj.selectable !== false)
+      .filter(obj => {
+        // 只排除不可選取且不是正在編輯的 textbox
+        if (obj.selectable === false && !(obj.type === 'textbox' && (obj as any).isEditing)) return false
+        return true
+      })
       .reverse()
-    canvasObjects.value = reversed
+
+    // 依物件型態決定顯示名稱
+    const withNames = reversed.map(obj => {
+      let displayName = ''
+      if (obj.type === 'textbox') {
+        displayName = (obj as fabric.Textbox).text?.trim() || '文字框'
+      } else if (obj.type === 'image') {
+        // 圖片流水號
+        const imageObjs = reversed.filter(o => o.type === 'image')
+        const index = imageObjs.indexOf(obj) + 1
+        // 嘗試從 obj 的 src 取出檔名
+        const src = (obj as any).src || (obj as any).getSrc?.() || ''
+        if (typeof src === 'string' && src) {
+          try {
+            displayName = `${decodeURIComponent(src.split('/').pop()?.split('?')[0] || '')} (${index})`
+          } catch { displayName = `圖片${index}` }
+        } else {
+          displayName = `圖片${index}`
+        }
+      } else {
+        displayName = obj.type || '物件'
+      }
+      return Object.assign(obj, { displayName })
+    })
+    canvasObjects.value = withNames
     const active = canvas.getActiveObject()
-    activeObjectIndex.value = active ? reversed.indexOf(active) : -1
+    activeObjectIndex.value = active ? withNames.indexOf(active) : -1
   }
 
   // ============================================================
@@ -576,7 +615,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       activeIsText.value = true
       fontSize.value = tb.fontSize as number
       fontColor.value = (tb.fill as string) || DEFAULT_TEXT_COLOR
-      fontFamily.value = tb.fontFamily || 'Arial'
+      fontFamily.value = tb.fontFamily || 'Noto Sans TC'
       fontBold.value = tb.fontWeight === 'bold'
       fontItalic.value = tb.fontStyle === 'italic'
       fontUnderline.value = !!tb.underline
@@ -634,7 +673,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     const text = tb.text?.length ? tb.text : ' '
     const probe = new fabric.Text(text, {
       fontSize: Number(tb.fontSize) || 24,
-      fontFamily: tb.fontFamily || 'Arial',
+      fontFamily: tb.fontFamily || 'Noto Sans TC',
       fontWeight: tb.fontWeight || 'normal',
       fontStyle: tb.fontStyle || 'normal',
       underline: !!tb.underline,
@@ -1484,8 +1523,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       const target = (event as { target?: FabricObj }).target
       if (!target || target.type !== 'textbox') return
       fitTextboxToText(target)
+      refreshObjectList() // 先同步物件列表，確保即時顯示
       canvas?.requestRenderAll()
-      refreshObjectList()
       saveState()
     })
   }

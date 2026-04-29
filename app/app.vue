@@ -38,3 +38,6 @@
     </main>
   </div>
 </template>
+  <script setup lang="ts">
+  import "@/assets/fonts.css";
+  </script>
