@@ -471,13 +471,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const persistState = (): void => {
     if (!canvas) return
     try {
-      const json = canvas.toJSON(SERIALIZE_PROPS) as { objects?: Array<Record<string, unknown>> }
-      if (Array.isArray(json.objects)) {
-        json.objects = json.objects.filter((obj) => {
-          const role = (obj as { objectRole?: string }).objectRole
-          return !role || !PERSIST_EXCLUDED_ROLES.has(role)
-        })
-      }
+      const json = canvas.toJSON() as { objects?: Array<Record<string, unknown>> }
+      console.log(json)
       const state: PersistedState = {
         canvasJSON: json,
         canvasWidth: canvas.getWidth(),
@@ -781,10 +776,13 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   /** 通用：將物件加入畫布、套用控制點，並在必要時調整 z-index */
   const addObject = (obj: FabricObj): void => {
     if (!canvas) return
+    const objects = canvas.getObjects()
     applyCustomControls(obj)
     canvas.add(obj)
     if ((obj as FabricObjWithRole).objectRole === 'photo') {
       placePhotoBelowFrame(obj)
+    }else{
+      canvas.moveObjectTo(obj, Math.max(objects.length - 2, 0))
     }
     canvas.setActiveObject(obj)
     keepWatermarkOnTop()
@@ -892,23 +890,26 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const placePhotoBelowFrame = (photo: FabricObj): void => {
     if (!canvas || !frameObject.value || !photo) return
     const frameIndex = canvas.getObjects().indexOf(frameObject.value)
-    canvas.moveObjectTo(photo, Math.max(frameIndex - 1, 0))
+    canvas.moveObjectTo(photo, canvas.getObjects().length-4)
   }
 
   /** 確保浮水印永遠在最上層（任何重新排序後皆需呼叫） */
   const keepWatermarkOnTop = (): void => {
     if (!canvas || !watermarkObject.value) return
     const objects = canvas.getObjects()
-    canvas.moveObjectTo(watermarkObject.value, Math.max(objects.length - 1, 0))
+    console.log(canvas.toJSON())
+    //canvas.moveObjectTo(watermarkObject.value, Math.max(objects.length - 1, 0))
+    console.log(canvas.toJSON())
   }
 
   /** 在畫布中央加上一個傾斜的半透明浮水印（不可選取） */
   const addCanvasWatermark = (): void => {
     if (!canvas) return
-
-    // 已存在則先移除，避免重複
+    // 已存在則先從 canvas 移除，避免重複
     if (watermarkObject.value) {
-      canvas.remove(watermarkObject.value)
+      if (canvas.getObjects().includes(watermarkObject.value)) {
+        canvas.remove(watermarkObject.value)
+      }
       watermarkObject.value = null
     }
 
@@ -925,13 +926,18 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       evented: false,
       hasControls: false,
       hasBorders: false,
-    })
+    });
 
     // 標記自訂 role 以利還原時辨識
-    ;(overlay as FabricObjWithRole).objectRole = WATERMARK_ROLE
+    (overlay as FabricObjWithRole).objectRole = WATERMARK_ROLE
 
     watermarkObject.value = overlay
     canvas.add(overlay)
+    console.log(
+      canvas.toJSON(['selectable'], {
+      includeDefaultValues: true
+      })
+    )
     keepWatermarkOnTop()
   }
 
