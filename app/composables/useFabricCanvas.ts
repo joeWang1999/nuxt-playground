@@ -1071,8 +1071,9 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
   /** 上傳「照片」：必須先有畫框底圖才能上傳 */
   const uploadPhotoImage = (e: Event): void => {
-    const file = getFileFromEvent(e)
-    if (!file) return
+    const input = e.target as HTMLInputElement | null
+    const files = input?.files
+    if (!files || files.length === 0) return
 
     if (!frameObject.value) {
       alert('請先上傳畫框底圖，再上傳照片')
@@ -1080,18 +1081,21 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const imageUrl = String(reader.result || '')
-        await addPhotoToCanvas(imageUrl)
-        resetInputValue(e)
-      } catch (err) {
-        console.error('Upload photo failed:', err)
-        alert('照片載入失敗，請確認檔案格式')
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        try {
+          const imageUrl = String(reader.result || '')
+          await addPhotoToCanvas(imageUrl)
+        } catch (err) {
+          console.error('Upload photo failed:', err)
+          alert('照片載入失敗，請確認檔案格式')
+        }
       }
-    }
-    reader.readAsDataURL(file)
+      reader.readAsDataURL(file)
+    })
+    // 清空 input 讓同一批檔案可重複上傳
+    resetInputValue(e)
   }
 
   // ============================================================

@@ -94,6 +94,7 @@
             <input
               type="file"
               accept="image/*"
+              multiple
               @change="uploadPhotoImage"
               class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm transition focus:border-[#0078C8] focus:outline-none"
             />
