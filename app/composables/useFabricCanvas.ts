@@ -1,6 +1,7 @@
 import { ref, shallowRef, onMounted, onUnmounted, type Ref, type ShallowRef } from 'vue'
 import jsPDF from 'jspdf'
 import * as fabric from 'fabric'
+import { FabricObject } from 'fabric'
 
 // ================================================================
 // 型別定義 (Type Definitions)
@@ -99,6 +100,21 @@ type FabricObjWithRole = FabricObj & { objectRole?: string }
 //   - 姓名貼批次產生
 // ================================================================
 export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
+  const SERIALIZE_PROPS: string[] = [
+    'objectRole',
+    'selectable',
+    'evented',
+    'hasControls',
+    'hasBorders',
+    'lockMovementX',
+    'lockMovementY',
+    'lockRotation',
+    'lockScalingX',
+    'lockScalingY',
+    'lockSkewingX',
+    'lockSkewingY',
+  ]
+  FabricObject.customProperties = SERIALIZE_PROPS
   // ============================================================
   // 一、設定與基本狀態 (Configuration & State)
   // ============================================================
@@ -137,20 +153,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     FRAME_ROLE,
     PHOTO_ROLE,
   ])
-  const SERIALIZE_PROPS: string[] = [
-    'objectRole',
-    'selectable',
-    'evented',
-    'hasControls',
-    'hasBorders',
-    'lockMovementX',
-    'lockMovementY',
-    'lockRotation',
-    'lockScalingX',
-    'lockScalingY',
-    'lockSkewingX',
-    'lockSkewingY',
-  ]
+
 
   // 工具列可選的字型清單
   const FONT_FAMILIES: readonly string[] = [
@@ -472,7 +475,6 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     if (!canvas) return
     try {
       const json = canvas.toJSON() as { objects?: Array<Record<string, unknown>> }
-      console.log(json)
       const state: PersistedState = {
         canvasJSON: json,
         canvasWidth: canvas.getWidth(),
@@ -549,6 +551,9 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
         if (o.objectRole === WATERMARK_ROLE) {
           watermarkObject.value = obj
           return
+        }
+        if (o.objectRole === FRAME_ROLE) {
+          frameObject.value = obj
         }
         if (obj.selectable !== false) {
           applyCustomControls(obj)
@@ -897,9 +902,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const keepWatermarkOnTop = (): void => {
     if (!canvas || !watermarkObject.value) return
     const objects = canvas.getObjects()
-    console.log(canvas.toJSON())
-    //canvas.moveObjectTo(watermarkObject.value, Math.max(objects.length - 1, 0))
-    console.log(canvas.toJSON())
+    canvas.moveObjectTo(watermarkObject.value, Math.max(objects.length - 1, 0))
   }
 
   /** 在畫布中央加上一個傾斜的半透明浮水印（不可選取） */
@@ -933,11 +936,6 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
     watermarkObject.value = overlay
     canvas.add(overlay)
-    console.log(
-      canvas.toJSON(['selectable'], {
-      includeDefaultValues: true
-      })
-    )
     keepWatermarkOnTop()
   }
 
