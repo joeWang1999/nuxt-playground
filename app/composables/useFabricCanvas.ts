@@ -88,6 +88,9 @@ type FabricObj = fabric.FabricObject
 /** 帶有自訂 role 的 fabric 物件（用於識別浮水印 / 照片等） */
 type FabricObjWithRole = FabricObj & { objectRole?: string }
 
+type GoodsType = 'nameSticker' | 'frame'
+
+
 // ================================================================
 // useFabricCanvas
 // ----------------------------------------------------------------
@@ -120,7 +123,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // ============================================================
   const storageKey = options.storageKey || 'fabric-canvas-default-state'
   const watermarkText = options.watermarkText || 'PREVIEW'
-
+  const goodsType: Ref<GoodsType> = ref('nameSticker') // PDF 匯出時的商品名稱
   // DOM 參考：canvas 元素與其外層容器（容器用來計算縮放）
   const canvasEl = ref<HTMLCanvasElement | null>(null)
   const canvasContainerEl = ref<HTMLElement | null>(null)
@@ -147,12 +150,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const WATERMARK_ROLE = 'watermark-overlay'
   const FRAME_ROLE = 'frame-background'
   const PHOTO_ROLE = 'photo'
-  // 寫入 localStorage 時需排除的 role（底圖、畫框、浮水印不該被持久化）
-  const PERSIST_EXCLUDED_ROLES: ReadonlySet<string> = new Set([
-    WATERMARK_ROLE,
-    FRAME_ROLE,
-    PHOTO_ROLE,
-  ])
+
 
 
   // 工具列可選的字型清單
@@ -782,6 +780,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const addObject = (obj: FabricObj): void => {
     if (!canvas) return
     const objects = canvas.getObjects()
+    console.log(goodsType.value)
     applyCustomControls(obj)
     canvas.add(obj)
     if ((obj as FabricObjWithRole).objectRole === 'photo') {
@@ -1022,6 +1021,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     const file = getFileFromEvent(e)
     if (!file) return
 
+    goodsType.value = 'frame'
+
     const reader = new FileReader()
     reader.onload = async () => {
       try {
@@ -1046,7 +1047,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const uploadNameStickerFrameImage = (e: Event): void => {
     const file = getFileFromEvent(e)
     if (!file) return
-
+    
+    goodsType.value = 'frame'
     const reader = new FileReader()
     reader.onload = async () => {
       try {
