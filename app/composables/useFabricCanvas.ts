@@ -1696,6 +1696,33 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     refreshObjectList()
   }
 
+  /** 由文字清單點擊後，直接進入 textbox 文字編輯模式 */
+  const editTextboxObject = (obj: FabricObj): void => {
+    if (!canvas || !obj || obj.type !== 'textbox') return
+    const textbox = obj as fabric.Textbox
+    focusObject(textbox)
+    textbox.enterEditing()
+    textbox.selectAll()
+    textbox.hiddenTextarea?.focus()
+    canvas.requestRenderAll()
+  }
+
+  /** 由文字列表 inline input 即時更新 textbox 內容 */
+  const updateTextboxObjectText = (obj: FabricObj, text: string): void => {
+    if (!canvas || !obj || obj.type !== 'textbox') return
+    const textbox = obj as fabric.Textbox
+    textbox.set('text', text)
+    fitTextboxToText(textbox)
+    canvas.requestRenderAll()
+    refreshObjectList()
+  }
+
+  /** 結束文字列表 inline input 編輯後，寫入歷史紀錄 */
+  const commitTextboxObjectText = (obj: FabricObj, text: string): void => {
+    updateTextboxObjectText(obj, text)
+    saveState()
+  }
+
   /** 由側邊欄點擊刪除特定物件 */
   const removeObjectFromCanvas = (obj: FabricObj): void => {
     if (!canvas || !obj) return
@@ -1915,6 +1942,9 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     canvasObjects,
     activeObjectIndex,
     focusObject,
+    editTextboxObject,
+    updateTextboxObjectText,
+    commitTextboxObjectText,
     removeObjectFromCanvas,
     reorderObjectLayer,
     undo,

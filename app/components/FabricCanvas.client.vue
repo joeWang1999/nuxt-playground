@@ -80,6 +80,21 @@
             >
               複製選取物件
             </button>
+
+            <div class="mt-4">
+              <CanvasObjectList
+                :objects="textCanvasObjects"
+                :activeIndex="activeTextObjectIndex"
+                title="文字列表"
+                :draggableItems="false"
+                :editableTextLabel="true"
+                @focus="focusObject"
+                @update-text="updateTextboxObjectText"
+                @commit-text="commitTextboxObjectText"
+                @remove="removeObjectFromCanvas"
+                class="w-full"
+              />
+            </div>
           </div>
 
           <!-- 物件列表/圖層 -->
@@ -102,11 +117,12 @@
                 </button>
               </div>
               <CanvasObjectList
-                :objects="canvasObjects"
-                :activeIndex="activeObjectIndex"
+                :objects="nonTextCanvasObjects"
+                :activeIndex="activeNonTextObjectIndex"
+                title="物件列表"
+                :draggableItems="false"
                 @focus="focusObject"
                 @remove="removeObjectFromCanvas"
-                @reorder="reorderObjectLayer"
                 class="w-full"
               />
             </div>
@@ -348,16 +364,32 @@ const {
   alignBottomToCanvas,
   alignLeft,
   canvasObjects,
-  activeObjectIndex,
   focusObject,
+  updateTextboxObjectText,
+  commitTextboxObjectText,
   removeObjectFromCanvas,
-  reorderObjectLayer,
   undo,
   redo,
   loadPersistedState,
   getCanvasPreviewDataUrl,
   exportPDF,
 } = useFabricCanvas({ storageKey: 'fabric-canvas-state:general' })
+
+const textCanvasObjects = computed(() => {
+  return canvasObjects.value.filter((obj) => obj.type === 'textbox')
+})
+
+const nonTextCanvasObjects = computed(() => {
+  return canvasObjects.value.filter((obj) => obj.type !== 'textbox')
+})
+
+const activeTextObjectIndex = computed(() => {
+  return textCanvasObjects.value.findIndex((obj) => obj === activeObject.value)
+})
+
+const activeNonTextObjectIndex = computed(() => {
+  return nonTextCanvasObjects.value.findIndex((obj) => obj === activeObject.value)
+})
 
 const openPreview = () => {
   const url = getCanvasPreviewDataUrl()

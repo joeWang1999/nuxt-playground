@@ -90,6 +90,21 @@
               </button>
             </div>
 
+            <div class="mb-6">
+              <CanvasObjectList
+                :objects="textCanvasObjects"
+                :activeIndex="activeTextObjectIndex"
+                title="文字列表"
+                :draggableItems="false"
+                :editableTextLabel="true"
+                @focus="focusObject"
+                @update-text="updateTextboxObjectText"
+                @commit-text="commitTextboxObjectText"
+                @remove="removeObjectFromCanvas"
+                class="w-full"
+              />
+            </div>
+
             <!-- 文字樣式編輯（選取文字框時顯示） -->
             <template v-if="activeIsText">
               <h3 class="mb-3 text-sm font-bold text-[#2C2C2C]">文字樣式</h3>
@@ -101,7 +116,7 @@
                 :fontItalic="fontItalic"
                 :fontUnderline="fontUnderline"
                 :fontLinethrough="fontLinethrough"
-                :fontFamilies="FONT_FAMILIES"
+                :fontFamilies="[...FONT_FAMILIES]"
                 @style-change="updateTextStyle"
                 @toggle-bold="toggleBold"
                 @toggle-italic="toggleItalic"
@@ -270,6 +285,7 @@ const {
   canvasEl,
   canvasContainerEl,
   activeIsText,
+  activeObject,
   fontSize,
   fontColor,
   fontFamily,
@@ -307,12 +323,25 @@ const {
   alignBottomToCanvas,
   alignLeft,
   applyStyleToAll,
+  canvasObjects,
+  focusObject,
+  updateTextboxObjectText,
+  commitTextboxObjectText,
+  removeObjectFromCanvas,
   undo,
   redo,
   loadPersistedState,
   getCanvasPreviewDataUrl,
   exportPDF,
 } = useFabricCanvas({ storageKey: 'fabric-canvas-state:name-sticker' })
+
+const textCanvasObjects = computed(() => {
+  return canvasObjects.value.filter((obj) => obj.type === 'textbox')
+})
+
+const activeTextObjectIndex = computed(() => {
+  return textCanvasObjects.value.findIndex((obj) => obj === activeObject.value)
+})
 
 const canGenerateNameStickers = computed(() => {
   return stickerName.value.trim().length > 0 && selectedStickerSpec.value !== ''
