@@ -2,51 +2,16 @@
 <template>
   <div class="flex h-screen flex-col bg-[#ECECEC] text-[#2C2C2C]" style="font-family: 'PingFang TC', sans-serif">
     <!-- 頂部工具列 -->
-    <div class="relative z-50 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm">
-      <div class="flex items-center space-x-4">
-        <button
-          @click="loadPersistedState"
-          :disabled="!hasPersistedState"
-          class="flex items-center space-x-2 text-gray-600 transition hover:text-[#2C2C2C] disabled:opacity-40"
-        >
-          <span class="text-sm font-semibold">載入儲存狀態</span>
-        </button>
-      </div>
-
-      <div class="flex items-center space-x-4">
-        <div class="flex space-x-3 text-gray-400">
-          <button
-            @click="undo"
-            :disabled="undoStack.length <= 1"
-            class="hover:text-[#2C2C2C] disabled:opacity-40"
-            title="上一步"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-          </button>
-          <button
-            @click="redo"
-            :disabled="redoStack.length === 0"
-            class="hover:text-[#2C2C2C] disabled:opacity-40"
-            title="下一步"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
-          </button>
-        </div>
-        <button
-          @click="openPreview"
-          class="flex items-center space-x-2 text-sm font-semibold text-gray-600 transition hover:text-[#2C2C2C]"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>預覽</span>
-        </button>
-        <button
-          @click="exportPDF"
-          class="w-[120px] rounded-[100px] bg-[#0078C8] px-4 py-2 text-base font-medium text-white shadow-md transition hover:bg-[#0060a0]"
-        >
-          匯出 PDF
-        </button>
-      </div>
-    </div>
+    <TopToolbar
+      :canLoadPersisted="hasPersistedState"
+      :canUndo="undoStack.length > 1"
+      :canRedo="redoStack.length > 0"
+      @load-persisted="loadPersistedState"
+      @undo="undo"
+      @redo="redo"
+      @open-preview="openPreview"
+      @export-pdf="exportPDF"
+    />
 
     <!-- 主內容區：左側圖示欄＋浮動面板＋畫布 -->
     <div class="relative flex flex-1 overflow-hidden">
@@ -141,6 +106,7 @@
                 :activeIndex="activeObjectIndex"
                 @focus="focusObject"
                 @remove="removeObjectFromCanvas"
+                @reorder="reorderObjectLayer"
                 class="w-full"
               />
             </div>
@@ -152,6 +118,7 @@
       <div
         ref="canvasContainerEl"
         class="relative z-10 flex flex-1 items-center justify-center overflow-hidden"
+        @click="closeObjectActionMoreMenu"
       >
         <div
           class="flex items-center justify-center w-full h-full"
@@ -173,6 +140,56 @@
             }"
           >
             <canvas ref="canvasEl" class="border border-gray-300 rounded"></canvas>
+          </div>
+        </div>
+
+        <div
+          v-if="objectActionBar.visible"
+          class="fixed z-[60]"
+          :style="{
+            left: objectActionBar.left + 'px',
+            top: objectActionBar.top + 'px',
+            transform: 'translate(-50%, -100%)',
+          }"
+          @click.stop
+        >
+          <div class="relative">
+            <div class="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 transition hover:bg-gray-100"
+                title="複製物件"
+                @click="duplicateSelectedObject"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-[#D14343] transition hover:bg-red-50"
+                title="刪除物件"
+                @click="deleteSelectedObject"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              </button>
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 transition hover:bg-gray-100"
+                title="更多"
+                @click="toggleObjectActionMoreMenu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </button>
+            </div>
+
+            <div
+              v-if="objectActionMoreMenuOpen"
+              class="absolute right-0 top-[calc(100%+8px)] w-56 rounded-xl border border-gray-200 bg-white p-1 shadow-xl"
+            >
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignLeft">靠左</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignCenterToCanvas">水平置中</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignRightToCanvas">靠右</button>
+              <div class="my-1 h-px bg-gray-200"></div>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignTopToCanvas">靠上</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignMiddleToCanvas">垂直置中</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignBottomToCanvas">靠下</button>
+            </div>
           </div>
         </div>
       </div>
@@ -223,6 +240,10 @@
           @click="toggleUnderline"
           :class="['w-8 h-8 rounded border underline text-sm transition-colors', fontUnderline ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
         >U</button>
+        <button
+          @click="toggleLinethrough"
+          :class="['w-8 h-8 rounded border line-through text-sm transition-colors', fontLinethrough ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
+        >S</button>
       </div>
     </div>
 
@@ -259,6 +280,7 @@
 
 <script setup lang="ts">
 import CanvasZoomControl from './CanvasZoomControl.vue'
+import TopToolbar from './TopToolbar.vue'
 import { computed, ref } from 'vue'
 import { useFabricCanvas } from '~/composables/useFabricCanvas'
 
@@ -293,6 +315,7 @@ const {
   fontBold,
   fontItalic,
   fontUnderline,
+  fontLinethrough,
   FONT_FAMILIES,
   undoStack,
   redoStack,
@@ -306,16 +329,29 @@ const {
   toggleBold,
   toggleItalic,
   toggleUnderline,
+  toggleLinethrough,
   addText,
   uploadFrameImage,
   uploadPhotoImage,
   bringForward,
   sendBackward,
   duplicateSelectedObject,
+  deleteSelectedObject,
+  objectActionBar,
+  objectActionMoreMenuOpen,
+  toggleObjectActionMoreMenu,
+  closeObjectActionMoreMenu,
+  alignCenterToCanvas,
+  alignRightToCanvas,
+  alignTopToCanvas,
+  alignMiddleToCanvas,
+  alignBottomToCanvas,
+  alignLeft,
   canvasObjects,
   activeObjectIndex,
   focusObject,
   removeObjectFromCanvas,
+  reorderObjectLayer,
   undo,
   redo,
   loadPersistedState,

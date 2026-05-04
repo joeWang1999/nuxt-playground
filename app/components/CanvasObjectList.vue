@@ -13,12 +13,22 @@
       <div
         v-for="(obj, index) in objects"
         :key="index"
+        draggable="true"
         @click="$emit('focus', obj)"
+        @dragstart="onDragStart(index)"
+        @dragenter.prevent="onDragEnter(index)"
+        @dragover.prevent
+        @drop.prevent="onDrop(index)"
+        @dragend="onDragEnd"
         :class="[
           'flex items-center gap-1 px-3 py-2 cursor-pointer select-none border-b border-gray-100 text-sm transition-colors',
           activeIndex === index
             ? 'bg-blue-100 text-blue-800 font-medium'
             : 'hover:bg-gray-100 text-gray-700',
+          dragOverIndex === index && draggedIndex !== index
+            ? 'ring-2 ring-inset ring-blue-300 bg-blue-50'
+            : '',
+          draggedIndex === index ? 'opacity-60' : '',
         ]"
       >
         <span class="flex-1 truncate">{{ getLabel(obj) }}</span>
@@ -34,13 +44,46 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 
 const props = defineProps({
   objects: { type: Array, required: true },
   activeIndex: { type: Number, default: -1 },
 })
 
-defineEmits(['focus', 'remove'])
+const emit = defineEmits(['focus', 'remove', 'reorder'])
+
+const draggedIndex = ref(-1)
+const dragOverIndex = ref(-1)
+
+function resetDragState() {
+  draggedIndex.value = -1
+  dragOverIndex.value = -1
+}
+
+function onDragStart(index) {
+  draggedIndex.value = index
+  dragOverIndex.value = index
+}
+
+function onDragEnter(index) {
+  if (draggedIndex.value === -1) return
+  dragOverIndex.value = index
+}
+
+function onDrop(index) {
+  if (draggedIndex.value === -1 || draggedIndex.value === index) {
+    resetDragState()
+    return
+  }
+
+  emit('reorder', draggedIndex.value, index)
+  resetDragState()
+}
+
+function onDragEnd() {
+  resetDragState()
+}
 
 function getLabel(obj) {
   if (obj.type === 'textbox') {

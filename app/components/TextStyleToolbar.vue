@@ -43,6 +43,10 @@
         @click="$emit('toggle-underline')"
         :class="['w-8 h-8 rounded border underline text-sm transition-colors', fontUnderline ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
       >U</button>
+      <button
+        @click="$emit('toggle-linethrough')"
+        :class="['w-8 h-8 rounded border line-through text-sm transition-colors', fontLinethrough ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100']"
+      >S</button>
     </div>
   </div>
 </template>
@@ -55,6 +59,7 @@ defineProps({
   fontBold: { type: Boolean, required: true },
   fontItalic: { type: Boolean, required: true },
   fontUnderline: { type: Boolean, required: true },
+  fontLinethrough: { type: Boolean, required: true },
   fontFamilies: { type: Array, required: true },
 })
 
@@ -65,6 +70,7 @@ defineEmits([
   'toggle-bold',
   'toggle-italic',
   'toggle-underline',
+  'toggle-linethrough',
   'style-change',
 ])
 </script>

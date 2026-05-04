@@ -1,4 +1,4 @@
-import { ref, shallowRef, onMounted, onUnmounted, type Ref, type ShallowRef } from 'vue'
+import { ref, shallowRef, watch, onMounted, onUnmounted, type Ref, type ShallowRef } from 'vue'
 import jsPDF from 'jspdf'
 import * as fabric from 'fabric'
 import { FabricObject } from 'fabric'
@@ -82,6 +82,14 @@ interface PersistedState {
   stickerName: string
 }
 
+interface ObjectActionBarState {
+  visible: boolean
+  left: number
+  top: number
+}
+
+type CanvasAlignAction = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
 /** 給 sidebar 用的 fabric 物件 */
 type FabricObj = fabric.FabricObject
 
@@ -89,6 +97,16 @@ type FabricObj = fabric.FabricObject
 type FabricObjWithRole = FabricObj & { objectRole?: string }
 
 type GoodsType = 'nameSticker' | 'frame'
+type NameStickerSpecKey = '4x6-landscape' | '4x6-portrait' | '4x5-landscape' | '4x5-portrait'
+
+interface NameStickerLayoutConfig {
+  columns: number
+  rows: number
+  marginLeftRatio: number
+  marginTopRatio: number
+  gapXRatio: number
+  gapYRatio: number
+}
 
 
 // ================================================================
@@ -134,6 +152,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // 目前選取物件的狀態
   const activeIsText = ref<boolean>(false)
   const activeObject = ref<FabricObj | null>(null)
+  const objectActionBar = ref<ObjectActionBarState>({ visible: false, left: 0, top: 0 })
+  const objectActionMoreMenuOpen = ref<boolean>(false)
 
   // 文字樣式狀態（與工具列雙向綁定）
   const fontSize = ref<number>(64)
@@ -143,6 +163,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const fontBold = ref<boolean>(false)
   const fontItalic = ref<boolean>(false)
   const fontUnderline = ref<boolean>(false)
+  const fontLinethrough = ref<boolean>(false)
   const stickerName = ref<string>('')                 // 姓名貼用的姓名輸入
 
   // 常數：文字框內距、物件 role 識別、序列化時要保留的自訂屬性
@@ -150,6 +171,42 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const WATERMARK_ROLE = 'watermark-overlay'
   const FRAME_ROLE = 'frame-background'
   const PHOTO_ROLE = 'photo'
+
+  // 姓名貼版型參數：目前主規格為 4x6 橫式，其餘先提供可微調的預設值
+  const NAME_STICKER_LAYOUTS: Record<NameStickerSpecKey, NameStickerLayoutConfig> = {
+    '4x6-landscape': {
+      columns: 4,
+      rows: 6,
+      marginLeftRatio: 0.1,
+      marginTopRatio: 0.06,
+      gapXRatio: 0.18,
+      gapYRatio: 0.1,
+    },
+    '4x6-portrait': {
+      columns: 3,
+      rows: 8,
+      marginLeftRatio: 0.1,
+      marginTopRatio: 0.08,
+      gapXRatio: 0.16,
+      gapYRatio: 0.08,
+    },
+    '4x5-landscape': {
+      columns: 4,
+      rows: 5,
+      marginLeftRatio: 0.1,
+      marginTopRatio: 0.08,
+      gapXRatio: 0.18,
+      gapYRatio: 0.12,
+    },
+    '4x5-portrait': {
+      columns: 3,
+      rows: 7,
+      marginLeftRatio: 0.1,
+      marginTopRatio: 0.1,
+      gapXRatio: 0.16,
+      gapYRatio: 0.1,
+    },
+  }
 
 
 
@@ -182,6 +239,15 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // 二、物件清單同步 (Object List Sync)
   // ============================================================
 
+  const getSidebarObjects = (): FabricObj[] => {
+    if (!canvas) return []
+
+    return canvas.getObjects().filter((obj) => {
+      if (obj.selectable === false && !(obj.type === 'textbox' && (obj as fabric.Textbox).isEditing)) return false
+      return true
+    }) as FabricObj[]
+  }
+
   /** 重新整理側邊欄物件清單，過濾掉不可選取的物件（如浮水印） */
   const refreshObjectList = (): void => {
     if (!canvas) {
@@ -189,17 +255,10 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       activeObjectIndex.value = -1
       return
     }
-    // 修正：編輯中的 textbox 也要顯示在列表上
-    const reversed = [...canvas.getObjects()]
-      .filter(obj => {
-        // 只排除不可選取且不是正在編輯的 textbox
-        if (obj.selectable === false && !(obj.type === 'textbox' && (obj as any).isEditing)) return false
-        return true
-      })
-      .reverse()
+    const reversed = [...getSidebarObjects()].reverse()
 
     // 依物件型態決定顯示名稱
-    const withNames = reversed.map(obj => {
+    const withNames: Array<FabricObj & { displayName: string }> = reversed.map((obj) => {
       let displayName = ''
       if (obj.type === 'textbox') {
         displayName = (obj as fabric.Textbox).text?.trim() || '文字框'
@@ -219,11 +278,11 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       } else {
         displayName = obj.type || '物件'
       }
-      return Object.assign(obj, { displayName })
+      return Object.assign(obj, { displayName }) as FabricObj & { displayName: string }
     })
     canvasObjects.value = withNames
     const active = canvas.getActiveObject()
-    activeObjectIndex.value = active ? withNames.indexOf(active) : -1
+    activeObjectIndex.value = active ? withNames.findIndex(item => item === active) : -1
   }
 
   // ============================================================
@@ -236,6 +295,10 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const canvasInternalH = ref<number>(500)
   const canvasDisplayW = ref<number>(800)
   const canvasDisplayH = ref<number>(500)
+
+  watch(canvasScale, () => {
+    requestAnimationFrame(() => updateObjectActionBarPosition())
+  })
 
   // PDF 匯出大小上限 (20MB)
   const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024
@@ -250,12 +313,12 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const snapGuideX = ref<SnapGuideX | null>(null)       // 垂直輔助線資料
   const snapGuideY = ref<SnapGuideY | null>(null)       // 水平輔助線資料
 
-  // 自訂控制點圖示 (右上角刪除、左下角縮放/旋轉)
-  const iconDelete = new Image()
-  iconDelete.src = '/icons/delete.svg'
+  // 自訂控制點圖示 (左下角尺寸、右下角旋轉)
+  const iconResize = new Image()
+  iconResize.src = '/icons/scale.svg'
 
-  const iconScale = new Image()
-  iconScale.src = '/icons/scale.svg'
+  const iconRotate = new Image()
+  iconRotate.src = '/icons/edit.svg'
 
   /** 清除目前的輔助線（可選擇是否要立即重繪畫面） */
   const clearSnapGuides = (requestRender = false): void => {
@@ -271,6 +334,94 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     if (requestRender && hadGuides && canvas) {
       canvas.requestRenderAll()
     }
+  }
+
+  const hideObjectActionBar = (): void => {
+    objectActionBar.value = { visible: false, left: 0, top: 0 }
+    objectActionMoreMenuOpen.value = false
+  }
+
+  const updateObjectActionBarPosition = (): void => {
+    if (!canvas || !canvasEl.value) {
+      hideObjectActionBar()
+      return
+    }
+
+    const active = canvas.getActiveObject()
+    if (!active || active.selectable === false || active.visible === false) {
+      hideObjectActionBar()
+      return
+    }
+
+    const bounds = active.getBoundingRect()
+    const canvasRect = canvasEl.value.getBoundingClientRect()
+    const widthRatio = canvasRect.width / canvas.getWidth()
+    const heightRatio = canvasRect.height / canvas.getHeight()
+
+    objectActionBar.value = {
+      visible: true,
+      left: canvasRect.left + (bounds.left + bounds.width / 2) * widthRatio,
+      top: canvasRect.top + bounds.top * heightRatio - 12,
+    }
+  }
+
+  const alignSelectionToCanvas = (action: CanvasAlignAction): void => {
+    if (!canvas) return
+    objectActionMoreMenuOpen.value = false
+
+    const targets = (canvas.getActiveObjects?.() || []).filter(o => o !== frameObject.value)
+    if (!targets.length) return
+
+    const alignToCanvas = targets.length === 1
+    const canvasW = canvas.getWidth()
+    const canvasH = canvas.getHeight()
+    const targetBounds = targets.map((obj) => ({ obj, bounds: obj.getBoundingRect() }))
+    const groupBounds = {
+      left: Math.min(...targetBounds.map((item) => item.bounds.left)),
+      right: Math.max(...targetBounds.map((item) => item.bounds.left + item.bounds.width)),
+      top: Math.min(...targetBounds.map((item) => item.bounds.top)),
+      bottom: Math.max(...targetBounds.map((item) => item.bounds.top + item.bounds.height)),
+    }
+    const groupCenterX = (groupBounds.left + groupBounds.right) / 2
+    const groupCenterY = (groupBounds.top + groupBounds.bottom) / 2
+    canvas.discardActiveObject()
+
+    targetBounds.forEach(({ obj, bounds }) => {
+      let nextLeft = obj.left ?? 0
+      let nextTop = obj.top ?? 0
+
+      if (action === 'left') {
+        nextLeft += (alignToCanvas ? 0 : groupBounds.left) - bounds.left
+      } else if (action === 'center') {
+        const targetCenter = alignToCanvas ? canvasW / 2 : groupCenterX
+        nextLeft += targetCenter - (bounds.left + bounds.width / 2)
+      } else if (action === 'right') {
+        const targetRight = alignToCanvas ? canvasW : groupBounds.right
+        nextLeft += targetRight - (bounds.left + bounds.width)
+      } else if (action === 'top') {
+        nextTop += (alignToCanvas ? 0 : groupBounds.top) - bounds.top
+      } else if (action === 'middle') {
+        const targetCenter = alignToCanvas ? canvasH / 2 : groupCenterY
+        nextTop += targetCenter - (bounds.top + bounds.height / 2)
+      } else if (action === 'bottom') {
+        const targetBottom = alignToCanvas ? canvasH : groupBounds.bottom
+        nextTop += targetBottom - (bounds.top + bounds.height)
+      }
+
+      obj.set({ left: nextLeft, top: nextTop })
+      obj.setCoords()
+    })
+
+    if (targets.length === 1) {
+      canvas.setActiveObject(targets[0]!)
+    } else {
+      canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas }))
+    }
+
+    updateObjectActionBarPosition()
+    keepWatermarkOnTop()
+    canvas.renderAll()
+    saveState()
   }
 
   /** 取得物件的外框（含 padding），並計算左/右/中心點等資訊供吸附使用 */
@@ -450,11 +601,16 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    * 真實尺寸 (w, h) 維持給 Fabric 計算用，CSS 顯示尺寸則會自動縮放
    */
   function updateCanvasScale(w: number, h: number): void {
+    const CANVAS_CONTAINER_PADDING_PX = 80
     canvasInternalW.value = w
     canvasInternalH.value = h
     const container = canvasContainerEl.value
-    const maxW = container ? container.clientWidth : window.innerWidth * 0.65
-    const maxH = container ? container.clientHeight || window.innerHeight * 0.85 : window.innerHeight * 0.85
+    const maxW = container
+      ? Math.max(container.clientWidth - CANVAS_CONTAINER_PADDING_PX * 2, 1)
+      : Math.max(window.innerWidth * 0.65 - CANVAS_CONTAINER_PADDING_PX * 2, 1)
+    const maxH = container
+      ? Math.max((container.clientHeight || window.innerHeight * 0.85) - CANVAS_CONTAINER_PADDING_PX * 2, 1)
+      : Math.max(window.innerHeight * 0.85 - CANVAS_CONTAINER_PADDING_PX * 2, 1)
     const scale = Math.min(1, maxW / w, maxH / h)
     canvasScale.value = scale
     canvasDisplayW.value = Math.round(w * scale)
@@ -592,7 +748,12 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    */
   function handleSelection(e: { selected?: FabricObj[] }): void {
     const obj = canvas?.getActiveObject?.() || e.selected?.[0]
-    if (!obj) return
+    if (!obj) {
+      hideObjectActionBar()
+      return
+    }
+
+    objectActionMoreMenuOpen.value = false
 
     if (isActiveSelectionObj(obj)) {
       const selection = obj as fabric.ActiveSelection
@@ -603,6 +764,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       canvas?.renderAll()
       activeObject.value = null
       activeIsText.value = false
+      updateObjectActionBarPosition()
       return
     }
 
@@ -617,9 +779,12 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       fontBold.value = tb.fontWeight === 'bold'
       fontItalic.value = tb.fontStyle === 'italic'
       fontUnderline.value = !!tb.underline
+      fontLinethrough.value = !!tb.linethrough
     } else {
       activeIsText.value = false
     }
+
+    updateObjectActionBarPosition()
   }
 
   /** 立即為當前 ActiveSelection 套用自訂控制點（避免框選時控制點還沒套用就被使用） */
@@ -654,6 +819,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       fontWeight: fontBold.value ? 'bold' : 'normal',
       fontStyle: fontItalic.value ? 'italic' : 'normal',
       underline: fontUnderline.value,
+      linethrough: fontLinethrough.value,
     })
     fitTextboxToText(tb)
     canvas.renderAll()
@@ -675,6 +841,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       fontWeight: tb.fontWeight || 'normal',
       fontStyle: tb.fontStyle || 'normal',
       underline: !!tb.underline,
+      linethrough: !!tb.linethrough,
     })
 
     const fittedWidth = Math.max((probe.width || 0) + TEXTBOX_PADDING_PX * 2, TEXTBOX_PADDING_PX * 2 + 1)
@@ -703,26 +870,32 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     updateTextStyle()
   }
 
+  /** 切換刪除線並更新文字框樣式 */
+  function toggleLinethrough(): void {
+    fontLinethrough.value = !fontLinethrough.value
+    updateTextStyle()
+  }
+
   // ============================================================
   // 七、自訂控制點 (Custom Controls)
   // ============================================================
 
   /**
    * 為物件套用統一視覺與兩個自訂控制點：
-   *   - 右上角：刪除按鈕
-   *   - 左下角：縮放 / 旋轉控制
-   * 並隱藏其餘預設控制點，保持 UI 簡潔
+   *   - 左下角：尺寸調整
+   *   - 右下角：旋轉
    */
   function applyCustomControls(obj: FabricObj): void {
-    const ICON_SIZE = 32
+    const ICON_SIZE = 38
+    const CONTROL_SIZE = 40
 
     obj.set({
       hasControls: true,
       hasBorders: true,
       cornerColor: '#fff',
-      cornerStrokeColor: '#24303b',
-      borderColor: '#24303b',
-      borderDashArray: [6, 6],
+      cornerStrokeColor: '#0078C8',
+      borderColor: '#0078C8',
+      borderDashArray: [5, 4],
       transparentCorners: false,
       padding: 14,
       centeredScaling: true,
@@ -730,45 +903,36 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
     obj.setControlsVisibility({
       mt: false, mb: false, ml: false, mr: false,
-      tl: false, tr: false, bl: false,
-      br: true,
+      tl: false, tr: false, bl: false, br: false,
       mtr: false,
     })
 
     const controls = obj.controls as Record<string, fabric.Control>
 
-    controls.deleteControl = new fabric.Control({
-      x: 0.5, y: -0.5,
-      cursorStyle: 'pointer',
-      cornerSize: 28,
-      mouseUpHandler: ((_eventData: unknown, transform: { target?: FabricObj }) => {
-        const target = transform?.target
-        if (target && canvas) {
-          if (isActiveSelectionObj(target)) {
-            const selection = target as fabric.ActiveSelection
-            const selectedItems = selection.getObjects()
-            canvas.discardActiveObject()
-            selectedItems.forEach((item) => canvas!.remove(item))
-          } else {
-            canvas.remove(target)
-          }
-          canvas.requestRenderAll()
-          saveState()
-        }
-        return true
-      }) as unknown as fabric.Control['mouseUpHandler'],
+    controls.resizeControl = new fabric.Control({
+      x: -0.5, y: 0.5,
+      sizeX: CONTROL_SIZE,
+      sizeY: CONTROL_SIZE,
+      touchSizeX: CONTROL_SIZE,
+      touchSizeY: CONTROL_SIZE,
+      actionHandler: fabric.controlsUtils.scalingEqually,
+      cursorStyleHandler: fabric.controlsUtils.scaleCursorStyleHandler,
+      actionName: 'scale',
       render: (ctx: CanvasRenderingContext2D, left: number, top: number) =>
-        ctx.drawImage(iconDelete, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
+        ctx.drawImage(iconResize, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
     })
 
-    controls.scaleRotate = new fabric.Control({
-      x: -0.5, y: 0.5,
-      cornerSize: 28,
+    controls.rotateControl = new fabric.Control({
+      x: 0.5, y: 0.5,
+      sizeX: CONTROL_SIZE,
+      sizeY: CONTROL_SIZE,
+      touchSizeX: CONTROL_SIZE,
+      touchSizeY: CONTROL_SIZE,
       actionHandler: fabric.controlsUtils.rotationWithSnapping,
       cursorStyleHandler: fabric.controlsUtils.rotationStyleHandler,
       actionName: 'rotate',
       render: (ctx: CanvasRenderingContext2D, left: number, top: number) =>
-        ctx.drawImage(iconScale, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
+        ctx.drawImage(iconRotate, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
     })
   }
 
@@ -815,7 +979,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    * 在底圖上以 4 (欄) x 6 (列) 的格狀排列產生姓名文字
    * 會使用目前工具列上的字體、大小、樣式等設定
    */
-  const generateNameStickers = (): void => {
+  const generateNameStickers = (specKey: NameStickerSpecKey): void => {
     if (!canvas || !frameObject.value) {
       alert('請先上傳姓名貼底圖')
       return
@@ -828,16 +992,20 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       return
     }
 
-    const COLUMNS = 4
-    const ROWS = 6
-    const STICKER_GAP_X_RATIO = 0.18
-    const STICKER_GAP_Y_RATIO = 0.1
+    const layout = NAME_STICKER_LAYOUTS[specKey]
+    if (!layout) {
+      alert('姓名貼規格無效')
+      return
+    }
+
+    const COLUMNS = layout.columns
+    const ROWS = layout.rows
     const canvasW = canvas.getWidth()
     const canvasH = canvas.getHeight()
-    const marginLeft = canvasW * 0.1
-    const marginTop = canvasH * 0.06
-    const gapX = canvasW * STICKER_GAP_X_RATIO
-    const gapY = canvasH * STICKER_GAP_Y_RATIO
+    const marginLeft = canvasW * layout.marginLeftRatio
+    const marginTop = canvasH * layout.marginTopRatio
+    const gapX = canvasW * layout.gapXRatio
+    const gapY = canvasH * layout.gapYRatio
     const totalGapX = gapX * (COLUMNS - 1)
     const totalGapY = gapY * (ROWS - 1)
     const cellW = (canvasW - marginLeft * 2 - totalGapX) / COLUMNS
@@ -857,6 +1025,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
           fontWeight: fontBold.value ? 'bold' : 'normal',
           fontStyle: fontItalic.value ? 'italic' : 'normal',
           underline: fontUnderline.value,
+          linethrough: fontLinethrough.value,
           textAlign: 'left',
           originX: 'left',
           originY: 'top',
@@ -904,8 +1073,36 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     canvas.moveObjectTo(watermarkObject.value, Math.max(objects.length - 1, 0))
   }
 
-  /** 在畫布中央加上一個傾斜的半透明浮水印（不可選取） */
-  const addCanvasWatermark = (): void => {
+  /** 產生與預覽一致的格狀傾斜浮水印影像（透明背景） */
+  const buildTiledWatermarkDataUrl = (label: string, width: number, height: number): string => {
+    const watermarkCanvas = document.createElement('canvas')
+    watermarkCanvas.width = width
+    watermarkCanvas.height = height
+    const ctx = watermarkCanvas.getContext('2d')
+    if (!ctx) return ''
+
+    ctx.save()
+    ctx.translate(width / 2, height / 2)
+    ctx.rotate(-Math.PI / 6)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = 'bold 42px Arial'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'
+
+    const xStep = 260
+    const yStep = 150
+    for (let y = -height; y <= height; y += yStep) {
+      for (let x = -width; x <= width; x += xStep) {
+        ctx.fillText(label, x, y)
+      }
+    }
+    ctx.restore()
+
+    return watermarkCanvas.toDataURL('image/png')
+  }
+
+  /** 在畫布上加上一個與預覽一致的格狀浮水印（不可選取） */
+  const addCanvasWatermark = async (): Promise<void> => {
     if (!canvas) return
     // 已存在則先從 canvas 移除，避免重複
     if (watermarkObject.value) {
@@ -915,27 +1112,56 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       watermarkObject.value = null
     }
 
-    const overlay = new fabric.Text(watermarkText, {
-      left: canvas.getWidth() / 2,
-      top: canvas.getHeight() / 2,
-      originX: 'center',
-      originY: 'center',
-      angle: -25,
-      fontSize: Math.max(Math.round(canvas.getWidth() * 0.12), 42),
-      fontWeight: 'bold',
-      fill: 'rgba(0, 0, 0, 0.14)',
-      selectable: false,
-      evented: false,
-      hasControls: false,
-      hasBorders: false,
-    });
+    const width = canvas.getWidth()
+    const height = canvas.getHeight()
 
-    // 標記自訂 role 以利還原時辨識
-    (overlay as FabricObjWithRole).objectRole = WATERMARK_ROLE
+    try {
+      const dataUrl = buildTiledWatermarkDataUrl(watermarkText, width, height)
+      if (!dataUrl) return
 
-    watermarkObject.value = overlay
-    canvas.add(overlay)
-    keepWatermarkOnTop()
+      const overlay = await fabric.Image.fromURL(dataUrl)
+      overlay.set({
+        left: 0,
+        top: 0,
+        originX: 'left',
+        originY: 'top',
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        hasBorders: false,
+        lockMovementX: true,
+        lockMovementY: true,
+        lockRotation: true,
+        lockScalingX: true,
+        lockScalingY: true,
+      })
+
+      ;(overlay as FabricObjWithRole).objectRole = WATERMARK_ROLE
+
+      watermarkObject.value = overlay
+      canvas.add(overlay)
+      keepWatermarkOnTop()
+    } catch (e) {
+      console.warn('Failed to create tiled watermark, fallback to simple watermark', e)
+      const fallback = new fabric.Text(watermarkText, {
+        left: width / 2,
+        top: height / 2,
+        originX: 'center',
+        originY: 'center',
+        angle: -25,
+        fontSize: Math.max(Math.round(width * 0.12), 42),
+        fontWeight: 'bold',
+        fill: 'rgba(0, 0, 0, 0.14)',
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        hasBorders: false,
+      })
+      ;(fallback as FabricObjWithRole).objectRole = WATERMARK_ROLE
+      watermarkObject.value = fallback
+      canvas.add(fallback)
+      keepWatermarkOnTop()
+    }
   }
 
   /**
@@ -966,7 +1192,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
     frameObject.value = frame
     canvas.add(frame)
-    addCanvasWatermark()
+    await addCanvasWatermark()
     canvas.discardActiveObject()
     canvas.renderAll()
     saveState()
@@ -1164,49 +1390,66 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       canvas.setActiveObject(new fabric.ActiveSelection(duplicated, { canvas }))
     }
 
+    updateObjectActionBarPosition()
     keepWatermarkOnTop()
     canvas.renderAll()
     saveState()
   }
 
-  /** 將所有選取物件對齊至最左側（以最小 left 為基準） */
+  const deleteSelectedObject = (): void => {
+    if (!canvas) return
+    const currentCanvas = canvas
+    objectActionMoreMenuOpen.value = false
+    const selected = currentCanvas.getActiveObjects?.() || []
+    if (!selected.length) return
+
+    currentCanvas.discardActiveObject()
+    selected.forEach((obj) => currentCanvas.remove(obj))
+    hideObjectActionBar()
+    currentCanvas.requestRenderAll()
+    saveState()
+  }
+
+  const hideSelectedObject = (): void => {
+    if (!canvas) return
+    objectActionMoreMenuOpen.value = false
+    const selected = canvas.getActiveObjects?.() || []
+    if (!selected.length) return
+
+    selected.forEach((obj) => {
+      obj.set({ visible: false })
+    })
+    canvas.discardActiveObject()
+    hideObjectActionBar()
+    canvas.requestRenderAll()
+    refreshObjectList()
+    saveState()
+  }
+
+  const toggleObjectActionMoreMenu = (): void => {
+    objectActionMoreMenuOpen.value = !objectActionMoreMenuOpen.value
+    updateObjectActionBarPosition()
+  }
+
+  const closeObjectActionMoreMenu = (): void => {
+    objectActionMoreMenuOpen.value = false
+  }
+
+  const alignLeftToCanvas = (): void => alignSelectionToCanvas('left')
+  const alignCenterToCanvas = (): void => alignSelectionToCanvas('center')
+  const alignRightToCanvas = (): void => alignSelectionToCanvas('right')
+  const alignTopToCanvas = (): void => alignSelectionToCanvas('top')
+  const alignMiddleToCanvas = (): void => alignSelectionToCanvas('middle')
+  const alignBottomToCanvas = (): void => alignSelectionToCanvas('bottom')
+
+  /** 將所有選取物件對齊至畫布最左側 */
   const alignLeft = (): void => {
-    const targets = (canvas?.getActiveObjects?.() || []).filter(o => o !== frameObject.value)
-    if (!targets.length || !canvas) return
-
-    canvas.discardActiveObject()
-    const minLeft = Math.min(...targets.map(o => o.left ?? 0))
-    targets.forEach(o => o.set({ left: minLeft }))
-
-    if (targets.length === 1) {
-      canvas.setActiveObject(targets[0]!)
-    } else {
-      canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas }))
-    }
-
-    keepWatermarkOnTop()
-    canvas.renderAll()
-    saveState()
+    alignLeftToCanvas()
   }
 
-  /** 將所有選取物件對齊至最上方（以最小 top 為基準） */
+  /** 將所有選取物件對齊至畫布最上方 */
   const alignTop = (): void => {
-    const targets = (canvas?.getActiveObjects?.() || []).filter(o => o !== frameObject.value)
-    if (!targets.length || !canvas) return
-
-    canvas.discardActiveObject()
-    const minTop = Math.min(...targets.map(o => o.top ?? 0))
-    targets.forEach(o => o.set({ top: minTop }))
-
-    if (targets.length === 1) {
-      canvas.setActiveObject(targets[0]!)
-    } else {
-      canvas.setActiveObject(new fabric.ActiveSelection(targets, { canvas }))
-    }
-
-    keepWatermarkOnTop()
-    canvas.renderAll()
-    saveState()
+    alignTopToCanvas()
   }
 
   /** 把目前選取文字框的樣式（字體、顏色、角度…）套用到畫布上所有文字框 */
@@ -1227,6 +1470,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
         fontWeight: src.fontWeight,
         fontStyle: src.fontStyle,
         underline: src.underline,
+        linethrough: src.linethrough,
         angle: src.angle,
       })
       fitTextboxToText(obj)
@@ -1428,47 +1672,15 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // ============================================================
 
   /**
-   * 產生一張帶有「格狀傾斜浮水印」的 PNG 預覽圖
-   * 不影響原畫布內容，僅用於對外展示
+   * 取得目前畫布的 PNG 預覽圖
+   * 畫布本身已含浮水印，不再額外覆蓋一次
    */
-  const addWatermarkToPreview = (watermarkLabel = 'PREVIEW'): string => {
+  const getCanvasPreviewDataUrl = (): string => {
     if (!canvas) return ''
-    const width = canvas.getWidth()
-    const height = canvas.getHeight()
-    const previewCanvas = document.createElement('canvas')
-    previewCanvas.width = width
-    previewCanvas.height = height
-    const ctx = previewCanvas.getContext('2d')
-    if (!ctx) return ''
-
-    const sourceCanvas = (canvas as fabric.Canvas & { lowerCanvasEl?: HTMLCanvasElement }).lowerCanvasEl
-    if (!sourceCanvas) return ''
-    ctx.drawImage(sourceCanvas, 0, 0, width, height)
-
-    ctx.save()
-    ctx.translate(width / 2, height / 2)
-    ctx.rotate(-Math.PI / 6)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.font = 'bold 42px Arial'
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'
-
-    const xStep = 260
-    const yStep = 150
-    for (let y = -height; y <= height; y += yStep) {
-      for (let x = -width; x <= width; x += xStep) {
-        ctx.fillText(watermarkLabel, x, y)
-      }
-    }
-    ctx.restore()
-
-    return previewCanvas.toDataURL('image/png')
+    return canvas.toDataURL({ format: 'png', multiplier: 1 })
   }
 
-  /** addWatermarkToPreview 的別名（語意更清楚的對外介面） */
-  const getCanvasPreviewDataUrl = (watermarkLabel = 'PREVIEW'): string => {
-    return addWatermarkToPreview(watermarkLabel)
-  }
+
 
   // ============================================================
   // 十五、側邊欄物件清單操作 (Sidebar Object Operations)
@@ -1478,6 +1690,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const focusObject = (obj: FabricObj): void => {
     if (!canvas || !obj) return
     canvas.setActiveObject(obj)
+    objectActionMoreMenuOpen.value = false
+    updateObjectActionBarPosition()
     canvas.renderAll()
     refreshObjectList()
   }
@@ -1486,7 +1700,60 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   const removeObjectFromCanvas = (obj: FabricObj): void => {
     if (!canvas || !obj) return
     canvas.remove(obj)
+    if (canvas.getActiveObjects?.().length === 0) {
+      hideObjectActionBar()
+    }
     canvas.requestRenderAll()
+    saveState()
+  }
+
+  /**
+   * 由側邊欄拖曳調整圖層順序，保留不可操作物件（如底圖、浮水印）在原位。
+   * 注意：sidebar 顯示順序是「上層在前」，而 canvas.getObjects() 是「下層在前」，
+   * 因此中間會做一次 reverse 來回轉換。
+   */
+  const reorderObjectLayer = (fromIndex: number, toIndex: number): void => {
+    if (!canvas || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+
+    // sidebar 可操作物件（已排除不可選取物件），順序為畫布底 -> 頂
+    const sidebarObjects = getSidebarObjects()
+    // 轉為 sidebar 顯示順序：頂 -> 底，才能用拖曳索引直接運算
+    const displayObjects = [...sidebarObjects].reverse()
+    const draggedObject = displayObjects[fromIndex]
+
+    if (!draggedObject || !displayObjects[toIndex]) return
+
+    // 先在「顯示順序」中完成拖曳插入
+    const nextDisplayObjects = [...displayObjects]
+    nextDisplayObjects.splice(fromIndex, 1)
+    nextDisplayObjects.splice(toIndex, 0, draggedObject)
+
+    // 再轉回 fabric 實際堆疊順序：底 -> 頂
+    const nextSidebarStack = [...nextDisplayObjects].reverse()
+    const currentObjects = [...canvas.getObjects()]
+    const sidebarObjectSet = new Set(sidebarObjects)
+
+    // 找出可重排物件在原始 canvas stack 的索引位置（不可操作物件不動）
+    const reorderablePositions = currentObjects.reduce<number[]>((positions, obj, index) => {
+      if (sidebarObjectSet.has(obj)) positions.push(index)
+      return positions
+    }, [])
+
+    // 只覆寫可重排位置，其餘位置維持原本物件
+    const nextObjects = [...currentObjects]
+    reorderablePositions.forEach((position, index) => {
+      nextObjects[position] = nextSidebarStack[index]!
+    })
+
+    // 依新陣列逐一套回 canvas 實際 z-index
+    nextObjects.forEach((obj, index) => {
+      canvas!.moveObjectTo(obj, index)
+    })
+
+    // 浮水印固定置頂，並同步 UI 與歷史
+    keepWatermarkOnTop()
+    canvas.requestRenderAll()
+    refreshObjectList()
     saveState()
   }
 
@@ -1520,14 +1787,27 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     canvas.on('selection:cleared', () => {
       activeObject.value = null
       activeIsText.value = false
+      hideObjectActionBar()
       clearSnapGuides(true)
       refreshObjectList()
     })
     canvas.on('object:added', refreshObjectList)
     canvas.on('object:removed', refreshObjectList)
-    canvas.on('object:moving', applyNearestSnap as (e: unknown) => void)
-    canvas.on('object:modified', () => { saveState(); refreshObjectList() })
-    canvas.on('mouse:up', () => clearSnapGuides(true))
+    canvas.on('object:moving', (e) => {
+      applyNearestSnap(e as { target?: FabricObj })
+      updateObjectActionBarPosition()
+    })
+    canvas.on('object:scaling', updateObjectActionBarPosition)
+    canvas.on('object:rotating', updateObjectActionBarPosition)
+    canvas.on('object:modified', () => {
+      updateObjectActionBarPosition()
+      saveState()
+      refreshObjectList()
+    })
+    canvas.on('mouse:up', () => {
+      clearSnapGuides(true)
+      updateObjectActionBarPosition()
+    })
     canvas.on('after:render', drawSnapGuides)
     canvas.on('text:changed', (event) => {
       const target = (event as { target?: FabricObj }).target
@@ -1547,6 +1827,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     canvas?.dispose()
     frameObject.value = null
     watermarkObject.value = null
+    hideObjectActionBar()
     updateCanvasScale(width, height)
 
     if (!canvasEl.value) return
@@ -1569,7 +1850,10 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     // createCanvas(800, 500)
 
     const onResize = (): void => {
-      if (canvas) updateCanvasScale(canvas.getWidth(), canvas.getHeight())
+      if (canvas) {
+        updateCanvasScale(canvas.getWidth(), canvas.getHeight())
+        updateObjectActionBarPosition()
+      }
     }
 
     window.addEventListener('resize', onResize)
@@ -1590,6 +1874,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     fontBold,
     fontItalic,
     fontUnderline,
+    fontLinethrough,
     stickerName,
     FONT_FAMILIES,
     undoStack,
@@ -1604,6 +1889,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     toggleBold,
     toggleItalic,
     toggleUnderline,
+    toggleLinethrough,
     addText,
     generateNameStickers,
     uploadFrameImage,
@@ -1612,6 +1898,17 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     bringForward,
     sendBackward,
     duplicateSelectedObject,
+    deleteSelectedObject,
+    hideSelectedObject,
+    objectActionBar,
+    objectActionMoreMenuOpen,
+    toggleObjectActionMoreMenu,
+    closeObjectActionMoreMenu,
+    alignCenterToCanvas,
+    alignRightToCanvas,
+    alignTopToCanvas,
+    alignMiddleToCanvas,
+    alignBottomToCanvas,
     alignLeft,
     alignTop,
     applyStyleToAll,
@@ -1619,10 +1916,10 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     activeObjectIndex,
     focusObject,
     removeObjectFromCanvas,
+    reorderObjectLayer,
     undo,
     redo,
     loadPersistedState,
-    addWatermarkToPreview,
     getCanvasPreviewDataUrl,
     exportPDF,
   }

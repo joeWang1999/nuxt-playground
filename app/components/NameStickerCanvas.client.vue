@@ -1,51 +1,16 @@
 ﻿<template>
   <div class="flex h-screen flex-col bg-[#ECECEC] text-[#2C2C2C]" style="font-family: 'PingFang TC', sans-serif">
     <!-- 頂部工具列 -->
-    <div class="relative z-50 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm">
-      <div class="flex items-center space-x-4">
-        <button
-          @click="loadPersistedState"
-          :disabled="!hasPersistedState"
-          class="flex items-center space-x-2 text-gray-600 transition hover:text-[#2C2C2C] disabled:opacity-40"
-        >
-          <span class="text-sm font-semibold">載入儲存狀態</span>
-        </button>
-      </div>
-
-      <div class="flex items-center space-x-4">
-        <div class="flex space-x-3 text-gray-400">
-          <button
-            @click="undo"
-            :disabled="undoStack.length <= 1"
-            class="hover:text-[#2C2C2C] disabled:opacity-40"
-            title="上一步"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-          </button>
-          <button
-            @click="redo"
-            :disabled="redoStack.length === 0"
-            class="hover:text-[#2C2C2C] disabled:opacity-40"
-            title="下一步"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
-          </button>
-        </div>
-        <button
-          @click="openPreview"
-          class="flex items-center space-x-2 text-sm font-semibold text-gray-600 transition hover:text-[#2C2C2C]"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>預覽</span>
-        </button>
-        <button
-          @click="exportPDF"
-          class="w-[120px] rounded-[100px] bg-[#0078C8] px-4 py-2 text-base font-medium text-white shadow-md transition hover:bg-[#0060a0]"
-        >
-          匯出 PDF
-        </button>
-      </div>
-    </div>
+    <TopToolbar
+      :canLoadPersisted="hasPersistedState"
+      :canUndo="undoStack.length > 1"
+      :canRedo="redoStack.length > 0"
+      @load-persisted="loadPersistedState"
+      @undo="undo"
+      @redo="redo"
+      @open-preview="openPreview"
+      @export-pdf="exportPDF"
+    />
 
     <!-- 主要內容區：左側選單 + 右側畫布 -->
     <div class="relative flex flex-1 overflow-hidden">
@@ -87,17 +52,6 @@
             />
           </div>
 
-          <!-- 圖片上傳 -->
-          <div v-else-if="activePanel === 'image'" class="space-y-4">
-            <p class="text-sm text-gray-500">上傳照片（置於畫框下方）</p>
-            <input
-              type="file"
-              accept="image/*"
-              @change="uploadPhotoImage"
-              class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm transition focus:border-[#0078C8] focus:outline-none"
-            />
-          </div>
-
           <!-- 文字新增與編輯 -->
           <div v-else-if="activePanel === 'text'" class="flex h-full flex-col">
             <!-- 姓名貼設定 -->
@@ -112,9 +66,25 @@
                   class="w-full border-none bg-transparent text-sm text-[#2C2C2C] focus:outline-none"
                 />
               </div>
+              <div class="mb-3">
+                <select
+                  v-model="selectedStickerSpec"
+                  class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-[#2C2C2C] transition focus:border-[#0078C8] focus:outline-none"
+                >
+                  <option value="" disabled>請選擇姓名貼規格</option>
+                  <option
+                    v-for="spec in stickerSpecOptions"
+                    :key="spec.value"
+                    :value="spec.value"
+                  >
+                    {{ spec.label }}
+                  </option>
+                </select>
+              </div>
               <button
-                @click="generateNameStickers"
-                class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-[16px] font-bold text-[#0078c9] transition hover:bg-gray-50"
+                @click="handleGenerateNameStickers"
+                :disabled="!canGenerateNameStickers"
+                class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-[16px] font-bold text-[#0078c9] transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 產生姓名文字框
               </button>
@@ -130,11 +100,13 @@
                 :fontBold="fontBold"
                 :fontItalic="fontItalic"
                 :fontUnderline="fontUnderline"
+                :fontLinethrough="fontLinethrough"
                 :fontFamilies="FONT_FAMILIES"
                 @style-change="updateTextStyle"
                 @toggle-bold="toggleBold"
                 @toggle-italic="toggleItalic"
                 @toggle-underline="toggleUnderline"
+                @toggle-linethrough="toggleLinethrough"
               />
               <button
                 @click="applyStyleToAll"
@@ -145,47 +117,6 @@
             </template>
           </div>
 
-          <!-- 圖層 -->
-          <div v-else-if="activePanel === 'layers'" class="space-y-3">
-            <div class="flex flex-col gap-2">
-              <button
-                @click="bringForward"
-                :disabled="!activeObject"
-                class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-              >
-                ↑ 往上一層
-              </button>
-              <button
-                @click="sendBackward"
-                :disabled="!activeObject"
-                class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-              >
-                ↓ 往下一層
-              </button>
-            </div>
-            <div class="my-2 h-px w-full bg-gray-200" />
-            <button
-              @click="duplicateSelectedObject"
-              :disabled="!activeObject"
-              class="flex w-full items-center justify-center rounded-[100px] border border-[#0078c9] bg-white py-2.5 text-sm font-bold text-[#0078c9] transition hover:bg-gray-50 disabled:opacity-40"
-            >
-              複製選取物件
-            </button>
-            <button
-              @click="alignLeft"
-              :disabled="!activeObject"
-              class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-            >
-              靠左對齊
-            </button>
-            <button
-              @click="alignTop"
-              :disabled="!activeObject"
-              class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
-            >
-              靠上對齊
-            </button>
-          </div>
         </div>
       </div>
 
@@ -193,6 +124,7 @@
       <div
         ref="canvasContainerEl"
         class="relative z-10 flex flex-1 items-center justify-center overflow-hidden"
+        @click="closeObjectActionMoreMenu"
       >
         <div
           class="flex items-center justify-center w-full h-full"
@@ -214,6 +146,56 @@
             }"
           >
             <canvas ref="canvasEl" class="border border-gray-300 rounded"></canvas>
+          </div>
+        </div>
+
+        <div
+          v-if="objectActionBar.visible"
+          class="fixed z-[60]"
+          :style="{
+            left: objectActionBar.left + 'px',
+            top: objectActionBar.top + 'px',
+            transform: 'translate(-50%, -100%)',
+          }"
+          @click.stop
+        >
+          <div class="relative">
+            <div class="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 transition hover:bg-gray-100"
+                title="複製物件"
+                @click="duplicateSelectedObject"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-[#D14343] transition hover:bg-red-50"
+                title="刪除物件"
+                @click="deleteSelectedObject"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              </button>
+              <button
+                class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 transition hover:bg-gray-100"
+                title="更多"
+                @click="toggleObjectActionMoreMenu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </button>
+            </div>
+
+            <div
+              v-if="objectActionMoreMenuOpen"
+              class="absolute right-0 top-[calc(100%+8px)] w-56 rounded-xl border border-gray-200 bg-white p-1 shadow-xl"
+            >
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignLeft">靠左</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignCenterToCanvas">水平置中</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignRightToCanvas">靠右</button>
+              <div class="my-1 h-px bg-gray-200"></div>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignTopToCanvas">靠上</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignMiddleToCanvas">垂直置中</button>
+              <button class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100" @click="alignBottomToCanvas">靠下</button>
+            </div>
           </div>
         </div>
       </div>
@@ -250,8 +232,14 @@
 
 <script setup lang="ts">
 import CanvasZoomControl from './CanvasZoomControl.vue'
+import TopToolbar from './TopToolbar.vue'
 import { computed, ref } from 'vue'
 import { useFabricCanvas } from '~/composables/useFabricCanvas'
+
+type StickerSpecOption = {
+  label: string
+  value: '4x6-landscape' | '4x6-portrait' | '4x5-landscape' | '4x5-portrait'
+}
 
 const activePanel = ref<string | null>(null)
 const togglePanel = (panel: string) => {
@@ -260,9 +248,7 @@ const togglePanel = (panel: string) => {
 
 const sidebarItems = [
   { id: 'background', icon: '🖼️', label: '底圖上傳' },
-  { id: 'image', icon: '📷', label: '照片上傳' },
   { id: 'text', icon: '✏️', label: '文字編輯' },
-  { id: 'layers', icon: '📚', label: '圖層' },
 ]
 
 const activePanelTitle = computed(() => {
@@ -272,18 +258,25 @@ const activePanelTitle = computed(() => {
 
 const isPreviewOpen = ref(false)
 const previewImageUrl = ref('')
+const stickerSpecOptions: StickerSpecOption[] = [
+  { label: '4X6橫式', value: '4x6-landscape' },
+  { label: '4X6直式', value: '4x6-portrait' },
+  { label: '4X5橫式', value: '4x5-landscape' },
+  { label: '4X5直式', value: '4x5-portrait' },
+]
+const selectedStickerSpec = ref<'' | StickerSpecOption['value']>('')
 
 const {
   canvasEl,
   canvasContainerEl,
   activeIsText,
-  activeObject,
   fontSize,
   fontColor,
   fontFamily,
   fontBold,
   fontItalic,
   fontUnderline,
+  fontLinethrough,
   stickerName,
   FONT_FAMILIES,
   undoStack,
@@ -298,15 +291,21 @@ const {
   toggleBold,
   toggleItalic,
   toggleUnderline,
-  addText,
+  toggleLinethrough,
   generateNameStickers,
   uploadNameStickerFrameImage,
-  uploadPhotoImage,
-  bringForward,
-  sendBackward,
   duplicateSelectedObject,
+  deleteSelectedObject,
+  objectActionBar,
+  objectActionMoreMenuOpen,
+  toggleObjectActionMoreMenu,
+  closeObjectActionMoreMenu,
+  alignCenterToCanvas,
+  alignRightToCanvas,
+  alignTopToCanvas,
+  alignMiddleToCanvas,
+  alignBottomToCanvas,
   alignLeft,
-  alignTop,
   applyStyleToAll,
   undo,
   redo,
@@ -314,6 +313,15 @@ const {
   getCanvasPreviewDataUrl,
   exportPDF,
 } = useFabricCanvas({ storageKey: 'fabric-canvas-state:name-sticker' })
+
+const canGenerateNameStickers = computed(() => {
+  return stickerName.value.trim().length > 0 && selectedStickerSpec.value !== ''
+})
+
+const handleGenerateNameStickers = () => {
+  if (!selectedStickerSpec.value) return
+  generateNameStickers(selectedStickerSpec.value)
+}
 
 const openPreview = () => {
   const url = getCanvasPreviewDataUrl()
