@@ -1,7 +1,7 @@
 
 <template>
-  <div class="min-h-screen bg-slate-50 flex flex-col">
-    <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div class="flex h-screen flex-col overflow-hidden bg-slate-50">
+    <header class="z-20 shrink-0 border-b border-slate-200 bg-white">
       <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
         <p class="text-sm font-semibold text-slate-800">Nuxt Playground</p>
         <div class="flex items-center gap-2">
@@ -11,7 +11,7 @@
             active-class="bg-slate-800 text-white hover:bg-slate-800"
             exact-active-class="bg-slate-800 text-white hover:bg-slate-800"
           >
-            一般編輯
+            圖框
           </NuxtLink>
           <NuxtLink
             to="/name-sticker"
@@ -19,7 +19,7 @@
             active-class="bg-slate-800 text-white hover:bg-slate-800"
             exact-active-class="bg-slate-800 text-white hover:bg-slate-800"
           >
-            姓名貼編輯
+            姓名貼
           </NuxtLink>
           <NuxtLink
             to="/diy-frame"
@@ -33,11 +33,22 @@
       </nav>
     </header>
 
-    <main class="flex-1 flex flex-col">
-      <NuxtPage class="flex-1" />
+    <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <NuxtPage class="h-full min-h-0 flex-1 overflow-hidden" />
     </main>
   </div>
 </template>
   <script setup lang="ts">
   import "@/assets/fonts.css";
   </script>
+
+<style>
+html,
+body,
+#__nuxt {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+</style>

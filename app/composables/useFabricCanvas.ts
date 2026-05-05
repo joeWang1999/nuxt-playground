@@ -169,6 +169,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // 常數：文字框內距、物件 role 識別、序列化時要保留的自訂屬性
   const TEXTBOX_PADDING_PX = 4
   const WATERMARK_ROLE = 'watermark-overlay'
+  const WATERMARK_IMAGE_URL = '/images/waterMark.png'
   const FRAME_ROLE = 'frame-background'
   const PHOTO_ROLE = 'photo'
 
@@ -315,10 +316,10 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
   // 自訂控制點圖示 (左下角尺寸、右下角旋轉)
   const iconResize = new Image()
-  iconResize.src = '/icons/scale.svg'
+  iconResize.src = '/icons/size-scale.svg'
 
   const iconRotate = new Image()
-  iconRotate.src = '/icons/edit.svg'
+  iconRotate.src = '/icons/rotate.svg'
 
   /** 清除目前的輔助線（可選擇是否要立即重繪畫面） */
   const clearSnapGuides = (requestRender = false): void => {
@@ -601,17 +602,22 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    * 真實尺寸 (w, h) 維持給 Fabric 計算用，CSS 顯示尺寸則會自動縮放
    */
   function updateCanvasScale(w: number, h: number): void {
-    const CANVAS_CONTAINER_PADDING_PX = 80
+    const DESKTOP_CANVAS_CONTAINER_PADDING_PX = 80
+    const MOBILE_BREAKPOINT_PX = 768
+    const isMobileViewport = window.innerWidth < MOBILE_BREAKPOINT_PX
+    const canvasContainerPaddingPx = isMobileViewport ? 0 : DESKTOP_CANVAS_CONTAINER_PADDING_PX
     canvasInternalW.value = w
     canvasInternalH.value = h
     const container = canvasContainerEl.value
     const maxW = container
-      ? Math.max(container.clientWidth - CANVAS_CONTAINER_PADDING_PX * 2, 1)
-      : Math.max(window.innerWidth * 0.65 - CANVAS_CONTAINER_PADDING_PX * 2, 1)
+      ? Math.max(container.clientWidth - canvasContainerPaddingPx * 2, 1)
+      : Math.max(window.innerWidth * 0.65 - canvasContainerPaddingPx * 2, 1)
     const maxH = container
-      ? Math.max((container.clientHeight || window.innerHeight * 0.85) - CANVAS_CONTAINER_PADDING_PX * 2, 1)
-      : Math.max(window.innerHeight * 0.85 - CANVAS_CONTAINER_PADDING_PX * 2, 1)
-    const scale = Math.min(1, maxW / w, maxH / h)
+      ? Math.max((container.clientHeight || window.innerHeight * 0.85) - canvasContainerPaddingPx * 2, 1)
+      : Math.max(window.innerHeight * 0.85 - canvasContainerPaddingPx * 2, 1)
+    const scale = isMobileViewport
+      ? maxW / w
+      : Math.min(1, maxW / w, maxH / h)
     canvasScale.value = scale
     canvasDisplayW.value = Math.round(w * scale)
     canvasDisplayH.value = Math.round(h * scale)
@@ -886,31 +892,57 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    *   - 右下角：旋轉
    */
   function applyCustomControls(obj: FabricObj): void {
-    const ICON_SIZE = 38
-    const CONTROL_SIZE = 40
+    const MOBILE_BREAKPOINT_PX = 768
+    const isMobileViewport = window.innerWidth < MOBILE_BREAKPOINT_PX
+    const ICON_SIZE = isMobileViewport ? 128 : 64
+    const CONTROL_SIZE = isMobileViewport ? 128 : 64
+    const CORNER_RADIUS = 8
+
+    const renderInactiveCircleControl = (
+      ctx: CanvasRenderingContext2D,
+      left: number,
+      top: number,
+    ): void => {
+      ctx.save()
+      ctx.fillStyle = '#ffffff'
+      ctx.strokeStyle = '#4CC032'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(left, top, CORNER_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    const noopControlAction: fabric.ControlActionHandler = () => false
 
     obj.set({
       hasControls: true,
       hasBorders: true,
       cornerColor: '#fff',
-      cornerStrokeColor: '#0078C8',
-      borderColor: '#0078C8',
-      borderDashArray: [5, 4],
+      cornerStrokeColor: '#4CC032',
+      borderColor: '#4CC032',
       transparentCorners: false,
       padding: 14,
       centeredScaling: true,
     })
 
     obj.setControlsVisibility({
-      mt: false, mb: false, ml: false, mr: false,
-      tl: false, tr: false, bl: false, br: false,
+      mt: false,
+      mb: false,
+      ml: false,
+      mr: false,
+      tl: true,
+      tr: true,
+      bl: false,
+      br: false,
       mtr: false,
     })
 
     const controls = obj.controls as Record<string, fabric.Control>
 
     controls.resizeControl = new fabric.Control({
-      x: -0.5, y: 0.5,
+      x: 0.5, y: 0.5,
       sizeX: CONTROL_SIZE,
       sizeY: CONTROL_SIZE,
       touchSizeX: CONTROL_SIZE,
@@ -919,11 +951,11 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       cursorStyleHandler: fabric.controlsUtils.scaleCursorStyleHandler,
       actionName: 'scale',
       render: (ctx: CanvasRenderingContext2D, left: number, top: number) =>
-        ctx.drawImage(iconResize, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
+        ctx.drawImage(iconResize, left - ICON_SIZE / 2, top - ICON_SIZE / 2+10, ICON_SIZE, ICON_SIZE),
     })
 
     controls.rotateControl = new fabric.Control({
-      x: 0.5, y: 0.5,
+      x: -0.5, y: 0.5,
       sizeX: CONTROL_SIZE,
       sizeY: CONTROL_SIZE,
       touchSizeX: CONTROL_SIZE,
@@ -932,7 +964,35 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       cursorStyleHandler: fabric.controlsUtils.rotationStyleHandler,
       actionName: 'rotate',
       render: (ctx: CanvasRenderingContext2D, left: number, top: number) =>
-        ctx.drawImage(iconRotate, left - ICON_SIZE / 2, top - ICON_SIZE / 2, ICON_SIZE, ICON_SIZE),
+        ctx.drawImage(iconRotate, left - ICON_SIZE / 2, top - ICON_SIZE / 2+10, ICON_SIZE, ICON_SIZE),
+    })
+
+    controls.tl = new fabric.Control({
+      x: -0.5,
+      y: -0.5,
+      sizeX: CONTROL_SIZE,
+      sizeY: CONTROL_SIZE,
+      touchSizeX: CONTROL_SIZE,
+      touchSizeY: CONTROL_SIZE,
+      cursorStyle: 'default',
+      actionHandler: noopControlAction,
+      mouseDownHandler: noopControlAction,
+      mouseUpHandler: noopControlAction,
+      render: renderInactiveCircleControl,
+    })
+
+    controls.tr = new fabric.Control({
+      x: 0.5,
+      y: -0.5,
+      sizeX: CONTROL_SIZE,
+      sizeY: CONTROL_SIZE,
+      touchSizeX: CONTROL_SIZE,
+      touchSizeY: CONTROL_SIZE,
+      cursorStyle: 'default',
+      actionHandler: noopControlAction,
+      mouseDownHandler: noopControlAction,
+      mouseUpHandler: noopControlAction,
+      render: renderInactiveCircleControl,
     })
   }
 
@@ -1116,13 +1176,15 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     const height = canvas.getHeight()
 
     try {
-      const dataUrl = buildTiledWatermarkDataUrl(watermarkText, width, height)
-      if (!dataUrl) return
+      const overlay = await fabric.Image.fromURL(WATERMARK_IMAGE_URL, { crossOrigin: 'anonymous' })
+      const imageWidth = overlay.width || 1
+      const imageHeight = overlay.height || 1
 
-      const overlay = await fabric.Image.fromURL(dataUrl)
       overlay.set({
         left: 0,
         top: 0,
+        scaleX: width / imageWidth,
+        scaleY: height / imageHeight,
         originX: 'left',
         originY: 'top',
         selectable: false,
@@ -1142,7 +1204,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       canvas.add(overlay)
       keepWatermarkOnTop()
     } catch (e) {
-      console.warn('Failed to create tiled watermark, fallback to simple watermark', e)
+      console.warn('Failed to load watermark image, fallback to text watermark', e)
       const fallback = new fabric.Text(watermarkText, {
         left: width / 2,
         top: height / 2,
@@ -1703,6 +1765,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     focusObject(textbox)
     textbox.enterEditing()
     textbox.selectAll()
+    normalizeHiddenTextareaForEditing(textbox)
     textbox.hiddenTextarea?.focus()
     canvas.requestRenderAll()
   }
@@ -1796,6 +1859,30 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
    *  - 重繪後 → 將輔助線繪到上層
    *  - 文字內容變更 → 自動 fit 寬度
    */
+  function normalizeHiddenTextareaForEditing(target?: FabricObj | null): void {
+    if (!target || target.type !== 'textbox') return
+    const textbox = target as fabric.Textbox & { hiddenTextarea?: HTMLTextAreaElement }
+    const hiddenTextarea = textbox.hiddenTextarea
+    if (!hiddenTextarea) return
+
+    const parsePx = (value: string): number => {
+      const parsed = Number.parseFloat(value || '')
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value))
+    const rawLeft = parsePx(hiddenTextarea.style.left)
+    const rawTop = parsePx(hiddenTextarea.style.top)
+    const clampedLeft = clamp(rawLeft, 0, Math.max(window.innerWidth - 1, 0))
+    const clampedTop = clamp(rawTop, 0, Math.max(window.innerHeight - 1, 0))
+
+    // 改用 fixed 可避免 textarea 參與文件流造成頁面被撐大，同時保留接近原位置的輸入行為
+    hiddenTextarea.style.position = 'fixed'
+    hiddenTextarea.style.left = `${clampedLeft}px`
+    hiddenTextarea.style.top = `${clampedTop}px`
+    hiddenTextarea.style.margin = '0'
+    hiddenTextarea.style.pointerEvents = 'none'
+  }
+
   function bindCanvasEvents(): void {
     if (!canvas) return
 
@@ -1836,9 +1923,14 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       updateObjectActionBarPosition()
     })
     canvas.on('after:render', drawSnapGuides)
+    canvas.on('text:editing:entered', (event) => {
+      const target = (event as { target?: FabricObj }).target
+      normalizeHiddenTextareaForEditing(target)
+    })
     canvas.on('text:changed', (event) => {
       const target = (event as { target?: FabricObj }).target
       if (!target || target.type !== 'textbox') return
+      normalizeHiddenTextareaForEditing(target)
       fitTextboxToText(target)
       refreshObjectList() // 先同步物件列表，確保即時顯示
       canvas?.requestRenderAll()
@@ -1864,6 +1956,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       width,
       height,
       preserveObjectStacking: true,
+      hiddenTextareaContainer: canvasContainerEl.value ?? undefined,
     })
 
     bindCanvasEvents()

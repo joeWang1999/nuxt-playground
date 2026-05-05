@@ -1,21 +1,23 @@
 ﻿<template>
-  <div class="flex h-screen flex-col bg-[#ECECEC] text-[#2C2C2C]" style="font-family: 'PingFang TC', sans-serif">
+  <div class="flex h-full flex-col overflow-hidden bg-[#ECECEC] text-[#2C2C2C]" style="font-family: 'PingFang TC', sans-serif">
     <!-- 頂部工具列 -->
     <TopToolbar
       :canLoadPersisted="hasPersistedState"
       :canUndo="undoStack.length > 1"
       :canRedo="redoStack.length > 0"
+      :canProceedNext="canvasInternalW > 0 && canvasInternalH > 0"
       @load-persisted="loadPersistedState"
       @undo="undo"
       @redo="redo"
       @open-preview="openPreview"
       @export-pdf="exportPDF"
+      @next-step="openReviewModal"
     />
 
     <!-- 主要內容區：左側選單 + 右側畫布 -->
-    <div class="relative flex flex-1 overflow-hidden">
+    <div class="relative flex flex-1 overflow-hidden pb-20 md:pb-0">
       <!-- Sidebar Icons -->
-      <div class="relative z-40 flex w-[90px] shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 shadow-sm">
+      <div class="relative z-40 hidden w-[90px] shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 shadow-sm md:flex">
         <button
           v-for="item in sidebarItems"
           :key="item.id"
@@ -28,11 +30,18 @@
         </button>
       </div>
 
+      <div
+        v-if="activePanel"
+        class="fixed inset-0 z-40 bg-black/30 md:hidden"
+        @click="activePanel = null"
+      ></div>
+
       <!-- Side Panel -->
       <div
-        class="absolute bottom-4 left-[106px] top-4 z-30 flex w-[340px] flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl transition-all duration-300"
-        :class="!activePanel ? 'pointer-events-none -translate-x-[10px] opacity-0' : 'translate-x-0 opacity-100'"
+        class="fixed inset-x-0 bottom-[69px] z-50 flex max-h-[calc(50vh-69px)] flex-col overflow-hidden rounded-t-[28px] border-t border-gray-200 bg-white transition-all duration-300 md:absolute md:bottom-4 md:left-[106px] md:right-auto md:top-4 md:z-30 md:max-h-none md:w-[340px] md:rounded-2xl md:border md:border-gray-100 md:shadow-xl"
+        :class="!activePanel ? 'pointer-events-none translate-y-full opacity-0 md:-translate-x-[10px] md:translate-y-0' : 'translate-y-0 opacity-100 md:translate-x-0'"
       >
+        <div class="mx-auto mt-2 h-1.5 w-12 rounded-full bg-gray-300 md:hidden"></div>
         <div class="flex items-center justify-between border-b border-gray-50 px-6 py-5">
           <h2 class="text-lg font-bold">{{ activePanelTitle }}</h2>
           <button class="rounded-full bg-white p-1 text-gray-500 hover:text-[#2C2C2C]" @click="activePanel = null">
@@ -95,50 +104,48 @@
                 :objects="textCanvasObjects"
                 :activeIndex="activeTextObjectIndex"
                 title="文字列表"
-                :draggableItems="false"
+                :draggableItems="true"
                 :editableTextLabel="true"
                 @focus="focusObject"
+                @duplicate="duplicateObjectFromList"
                 @update-text="updateTextboxObjectText"
                 @commit-text="commitTextboxObjectText"
                 @remove="removeObjectFromCanvas"
+                @reorder="reorderObjectLayer"
                 class="w-full"
               />
             </div>
 
-            <!-- 文字樣式編輯（選取文字框時顯示） -->
-            <template v-if="activeIsText">
-              <h3 class="mb-3 text-sm font-bold text-[#2C2C2C]">文字樣式</h3>
-              <TextStyleToolbar
-                v-model:fontFamily="fontFamily"
-                v-model:fontSize="fontSize"
-                v-model:fontColor="fontColor"
-                :fontBold="fontBold"
-                :fontItalic="fontItalic"
-                :fontUnderline="fontUnderline"
-                :fontLinethrough="fontLinethrough"
-                :fontFamilies="[...FONT_FAMILIES]"
-                @style-change="updateTextStyle"
-                @toggle-bold="toggleBold"
-                @toggle-italic="toggleItalic"
-                @toggle-underline="toggleUnderline"
-                @toggle-linethrough="toggleLinethrough"
-              />
-              <button
-                @click="applyStyleToAll"
-                class="mt-4 flex w-full items-center justify-center rounded-[100px] bg-[#0078c9] py-2.5 text-[16px] font-bold text-white transition hover:bg-[#0060a0]"
-              >
-                套用編輯至全部
-              </button>
-            </template>
+            <button
+              v-if="activeIsText"
+              @click="applyStyleToAll"
+              class="mt-2 flex w-full items-center justify-center rounded-[100px] bg-[#0078c9] py-2.5 text-[16px] font-bold text-white transition hover:bg-[#0060a0]"
+            >
+              套用編輯至全部
+            </button>
           </div>
 
         </div>
       </div>
 
+      <div class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t border-gray-200 bg-white px-2 py-2 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] md:hidden">
+        <button
+          v-for="item in sidebarItems"
+          :key="item.id"
+          class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center transition-all"
+          :class="activePanel === item.id ? 'bg-[#EAF7FF] text-[#2391DA]' : 'text-gray-600'"
+          @click="togglePanel(item.id)"
+        >
+          <span class="text-xl leading-none">{{ item.icon }}</span>
+          <span class="text-[10px] font-medium leading-tight">{{ item.label }}</span>
+        </button>
+      </div>
+
       <!-- 畫布顯示區域：等比縮放置中 -->
       <div
         ref="canvasContainerEl"
-        class="relative z-10 flex flex-1 items-center justify-center overflow-hidden"
+        class="relative z-10 flex flex-1 items-center justify-center overflow-hidden transition-[padding] duration-300 md:pr-4"
+        :class="activePanel ? 'pb-[calc(50vh-72px)] md:pl-[380px] md:pb-0' : 'md:pl-4'"
         @click="closeObjectActionMoreMenu"
       >
         <div
@@ -150,6 +157,7 @@
           }"
         >
           <div
+            class="transition-transform duration-200 ease-out will-change-transform"
             :style="{
               transform: `scale(${canvasScale})`,
               transformOrigin: 'center',
@@ -160,7 +168,7 @@
               justifyContent: 'center',
             }"
           >
-            <canvas ref="canvasEl" class="border border-gray-300 rounded"></canvas>
+            <canvas ref="canvasEl"></canvas>
           </div>
         </div>
 
@@ -216,6 +224,23 @@
       </div>
     </div>
 
+    <TextFloatingToolbar
+      v-if="activeIsText"
+      v-model:fontFamily="fontFamily"
+      v-model:fontSize="fontSize"
+      v-model:fontColor="fontColor"
+      :fontFamilies="FONT_FAMILIES"
+      :fontBold="fontBold"
+      :fontItalic="fontItalic"
+      :fontUnderline="fontUnderline"
+      :fontLinethrough="fontLinethrough"
+      @style-change="updateTextStyle"
+      @toggle-bold="toggleBold"
+      @toggle-italic="toggleItalic"
+      @toggle-underline="toggleUnderline"
+      @toggle-linethrough="toggleLinethrough"
+    />
+
     <!-- 預覽彈窗 -->
     <div
       v-if="isPreviewOpen"
@@ -236,6 +261,13 @@
         />
       </div>
     </div>
+
+    <ReviewExportModal
+      :visible="isReviewModalOpen"
+      :previewUrl="reviewPreviewUrl"
+      @close="closeReviewModal"
+      @confirm="confirmExportPdf"
+    />
   </div>
   <CanvasZoomControl
     v-model="canvasScale"
@@ -247,8 +279,10 @@
 
 <script setup lang="ts">
 import CanvasZoomControl from './CanvasZoomControl.vue'
+import ReviewExportModal from './ReviewExportModal.vue'
+import TextFloatingToolbar from './TextFloatingToolbar.vue'
 import TopToolbar from './TopToolbar.vue'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useFabricCanvas } from '~/composables/useFabricCanvas'
 
 type StickerSpecOption = {
@@ -273,6 +307,8 @@ const activePanelTitle = computed(() => {
 
 const isPreviewOpen = ref(false)
 const previewImageUrl = ref('')
+const isReviewModalOpen = ref(false)
+const reviewPreviewUrl = ref('')
 const stickerSpecOptions: StickerSpecOption[] = [
   { label: '4X6橫式', value: '4x6-landscape' },
   { label: '4X6直式', value: '4x6-portrait' },
@@ -324,6 +360,8 @@ const {
   alignLeft,
   applyStyleToAll,
   canvasObjects,
+  activeObjectIndex,
+  reorderObjectLayer,
   focusObject,
   updateTextboxObjectText,
   commitTextboxObjectText,
@@ -340,8 +378,16 @@ const textCanvasObjects = computed(() => {
 })
 
 const activeTextObjectIndex = computed(() => {
-  return textCanvasObjects.value.findIndex((obj) => obj === activeObject.value)
+  const active = canvasObjects.value[activeObjectIndex.value]
+  if (!active || active.type !== 'textbox') return -1
+  return textCanvasObjects.value.findIndex((obj) => obj === active)
 })
+
+const duplicateObjectFromList = async (obj: unknown) => {
+  focusObject(obj as any)
+  await nextTick()
+  await duplicateSelectedObject()
+}
 
 const canGenerateNameStickers = computed(() => {
   return stickerName.value.trim().length > 0 && selectedStickerSpec.value !== ''
@@ -365,5 +411,25 @@ const openPreview = () => {
 const closePreview = () => {
   isPreviewOpen.value = false
   previewImageUrl.value = ''
+}
+
+const openReviewModal = () => {
+  const url = getCanvasPreviewDataUrl()
+  if (!url) {
+    alert('目前沒有可預覽的畫布')
+    return
+  }
+  reviewPreviewUrl.value = url
+  isReviewModalOpen.value = true
+}
+
+const closeReviewModal = () => {
+  isReviewModalOpen.value = false
+  reviewPreviewUrl.value = ''
+}
+
+const confirmExportPdf = async () => {
+  await exportPDF()
+  closeReviewModal()
 }
 </script>

@@ -697,7 +697,7 @@ function getTextDecoration(el) {
 
 <template>
   <div
-    class="flex flex-col h-screen bg-[#ECECEC] text-[#2C2C2C] overflow-hidden select-none"
+    class="flex h-full flex-col overflow-hidden bg-[#ECECEC] text-[#2C2C2C] select-none"
     style="font-family: 'PingFang TC', sans-serif"
     @mousemove="handleMove"
     @touchmove="handleMove"

@@ -1,9 +1,9 @@
 <template>
-  <div class="flex flex-col w-44 shrink-0 border-r border-gray-200 bg-gray-50">
+  <div class="flex flex-col w-44 shrink-0 border-r border-gray-200 bg-transparent">
     <p class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
       {{ title }}
     </p>
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-y-auto px-3">
       <div
         v-if="!objects.length"
         class="px-3 py-4 text-xs text-gray-400 text-center"
@@ -11,6 +11,9 @@
         尚無物件
       </div>
       <div
+        class="flex flex-col gap-2"
+      >
+        <div
         v-for="(obj, index) in objects"
         :key="index"
         :draggable="draggableItems"
@@ -21,12 +24,12 @@
         @drop.prevent="draggableItems ? onDrop(index) : null"
         @dragend="onDragEnd"
         :class="[
-          'flex items-center gap-1 px-3 py-2 cursor-pointer select-none border-b border-gray-100 text-sm transition-colors',
+          'flex items-center gap-2 px-0 py-2 cursor-pointer select-none border-b text-sm transition-colors',
           activeIndex === index
-            ? 'bg-blue-100 text-blue-800 font-medium'
-            : 'hover:bg-gray-100 text-gray-700',
+            ? 'border-blue-500 border-b-2 text-blue-700 font-medium'
+            : 'border-gray-200 text-gray-700 hover:text-gray-900',
           dragOverIndex === index && draggedIndex !== index
-            ? 'ring-2 ring-inset ring-blue-300 bg-blue-50'
+            ? 'ring-1 ring-inset ring-blue-300'
             : '',
           draggedIndex === index ? 'opacity-60' : '',
         ]"
@@ -35,7 +38,7 @@
           v-if="editableTextLabel && obj.type === 'textbox' && editingIndex === index"
           ref="editInputEl"
           v-model="editingText"
-          class="flex-1 min-w-0 rounded border border-blue-300 bg-white px-1.5 py-0.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          class="flex-1 min-w-0 rounded border border-blue-300 bg-white px-1.5 py-0.5 text-sm text-gray-800 "
           @mousedown.stop
           @click.stop
           @input="onInlineInput(obj)"
@@ -52,12 +55,19 @@
           {{ getLabel(obj) }}
         </button>
         <span v-else class="flex-1 truncate">{{ getLabel(obj) }}</span>
-        <button
-          v-if="obj.selectable !== false"
-          @click.stop="$emit('remove', obj)"
-          class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs leading-none"
-          title="移除"
-        >✕</button>
+        <div v-if="obj.selectable !== false" class="shrink-0 flex items-center gap-1">
+          <button
+            @click.stop="$emit('duplicate', obj)"
+            class="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 transition-colors text-xs leading-none"
+            title="複製"
+          >⧉</button>
+          <button
+            @click.stop="$emit('remove', obj)"
+            class="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-600 transition-colors text-xs leading-none"
+            title="移除"
+          >✕</button>
+        </div>
+      </div>
       </div>
     </div>
   </div>
@@ -74,7 +84,7 @@ const props = defineProps({
   editableTextLabel: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['focus', 'remove', 'reorder', 'update-text', 'commit-text'])
+const emit = defineEmits(['focus', 'duplicate', 'remove', 'reorder', 'update-text', 'commit-text'])
 
 const draggedIndex = ref(-1)
 const dragOverIndex = ref(-1)

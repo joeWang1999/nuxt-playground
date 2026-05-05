@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed bottom-4 right-4 z-50 bg-white/90 rounded shadow-lg flex items-center px-3 py-2 space-x-2 select-none">
+  <div class="fixed bottom-24 right-4 z-30 flex items-center space-x-2 rounded-xl bg-white/90 px-3 py-2 shadow-lg select-none md:bottom-4 md:z-50">
     <button
       class="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-200 text-xl font-bold"
       @click="zoomOut"
@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineProps, defineEmits } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, required: true },
