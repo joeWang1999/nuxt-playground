@@ -79,6 +79,26 @@
           </div>
         </div>
 
+        <!-- 拼貼圖片 -->
+        <div v-else-if="activePanel === 'collage'" class="space-y-3">
+          <p class="text-sm text-gray-500">點選圖片加入畫布</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="img in collageImages"
+              :key="img.url"
+              class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 transition hover:border-[#0078C8] hover:shadow-md"
+              @click="addCollageImageToCanvas(img.url)"
+            >
+              <img
+                :src="img.url"
+                :alt="img.label"
+                class="h-24 w-full object-cover transition group-hover:scale-105"
+              />
+              <span class="block truncate px-1 pb-1 pt-0.5 text-center text-xs text-gray-500">{{ img.label }}</span>
+            </button>
+          </div>
+        </div>
+
         <!-- 物件列表/圖層 -->
         <div v-else-if="activePanel === 'layers'" class="space-y-3">
           <div class="w-full">
@@ -230,8 +250,20 @@ const activePanel = ref<string | null>(null)
 const sidebarItems = [
   { id: 'background', icon: '🖼️', label: '畫框上傳' },
   { id: 'image', icon: '📷', label: '照片上傳' },
+  { id: 'collage', icon: '🎨', label: '拼貼' },
   { id: 'text', icon: '✏️', label: '文字編輯' },
   { id: 'layers', icon: '📚', label: '圖層' },
+]
+
+const collageImages = [
+  { label: '城市夜景', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=400&q=80' },
+  { label: '山嶽晨霧', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80' },
+  { label: '海浪海岸', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80' },
+  { label: '森林小徑', url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=80' },
+  { label: '花朵特寫', url: 'https://images.unsplash.com/photo-1490750967868-88df5691240e?w=400&q=80' },
+  { label: '星空銀河', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&q=80' },
+  { label: '沙漠日落', url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=400&q=80' },
+  { label: '秋葉林道', url: 'https://images.unsplash.com/photo-1477414348463-c0eb7f1359b6?w=400&q=80' },
 ]
 
 const activePanelTitle = computed(() => {
@@ -273,6 +305,7 @@ const {
   addText,
   uploadFrameImage,
   uploadPhotoImage,
+  addCollageImageToCanvas,
   bringForward,
   sendBackward,
   duplicateSelectedObject,

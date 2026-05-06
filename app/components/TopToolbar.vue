@@ -37,12 +37,6 @@
         <span>預覽</span>
       </button>
       <button
-        @click="$emit('export-pdf')"
-        class="rounded-[100px] border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-      >
-        匯出 PDF
-      </button>
-      <button
         :disabled="!canProceedNext"
         @click="$emit('next-step')"
         class="rounded-[100px] bg-[#0078C8] px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-[#0060a0] disabled:cursor-not-allowed disabled:bg-[#8ab9dc] disabled:shadow-none"

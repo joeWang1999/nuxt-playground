@@ -1288,6 +1288,35 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     saveState()
   }
 
+  /** 從 URL 載入拼貼圖片，置中放入畫布，圖層置於浮水印正下方 */
+  const addCollageImageToCanvas = async (imageUrl: string): Promise<void> => {
+    if (!canvas || !imageUrl) return
+
+    const img = await fabric.Image.fromURL(imageUrl, { crossOrigin: 'anonymous' })
+    const maxWidth = canvas.getWidth() * 0.6
+    const maxHeight = canvas.getHeight() * 0.6
+    const scale = Math.min(maxWidth / (img.width || 1), maxHeight / (img.height || 1), 1)
+
+    img.set({
+      left: Math.max((canvas.getWidth() - (img.width || 1) * scale) / 2, 0),
+      top: Math.max((canvas.getHeight() - (img.height || 1) * scale) / 2, 0),
+      scaleX: scale,
+      scaleY: scale,
+    })
+    ;(img as FabricObjWithRole).objectRole = 'collage'
+
+    applyCustomControls(img)
+    canvas.add(img)
+    // 放在浮水印下方一層
+    const objects = canvas.getObjects()
+    const wIdx = watermarkObject.value ? objects.indexOf(watermarkObject.value as fabric.FabricObject) : objects.length
+    canvas.moveObjectTo(img, Math.max(wIdx - 1, 0))
+    keepWatermarkOnTop()
+    canvas.setActiveObject(img)
+    canvas.renderAll()
+    saveState()
+  }
+
   // ============================================================
   // 十一、檔案上傳處理 (File Uploads)
   // ============================================================
@@ -2015,6 +2044,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     uploadFrameImage,
     uploadNameStickerFrameImage,
     uploadPhotoImage,
+    addCollageImageToCanvas,
     bringForward,
     sendBackward,
     duplicateSelectedObject,
