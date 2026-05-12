@@ -41,9 +41,26 @@
             type="file"
             accept="image/*"
             multiple
-            @change="uploadPhotoImage"
+            @change="handlePhotoUpload"
             class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm transition focus:border-[#0078C8] focus:outline-none"
           />
+          <!-- 近期上傳 -->
+          <div v-if="recentUploads.length > 0" class="space-y-2">
+            <p class="text-xs text-gray-400">近期上傳</p>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                v-for="(url, i) in recentUploads"
+                :key="i"
+                class="group overflow-hidden rounded-lg border border-gray-200 bg-gray-50 transition hover:border-[#0078C8] hover:shadow-md"
+                @click="addCollageImageToCanvas(url)"
+              >
+                <img
+                  :src="url"
+                  class="h-20 w-full object-cover transition group-hover:scale-105"
+                />
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 文字新增與編輯 -->
@@ -242,7 +259,7 @@ import CanvasZoomControl from './CanvasZoomControl.vue'
 import ReviewExportModal from './ReviewExportModal.vue'
 import TextFloatingToolbar from './TextFloatingToolbar.vue'
 import TopToolbar from './TopToolbar.vue'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import { useFabricCanvas } from '~/composables/useFabricCanvas'
 
 const activePanel = ref<string | null>(null)
@@ -275,6 +292,7 @@ const isPreviewOpen = ref(false)
 const previewImageUrl = ref('')
 const isReviewModalOpen = ref(false)
 const reviewPreviewUrl = ref('')
+const recentUploads = shallowRef<string[]>([])
 
 const {
   canvasEl,
@@ -343,6 +361,22 @@ const activeTextObjectIndex = computed(() => {
   if (!active || active.type !== 'textbox') return -1
   return textCanvasObjects.value.findIndex((obj) => obj === active)
 })
+
+const handlePhotoUpload = (e: Event) => {
+  const input = e.target as HTMLInputElement | null
+  const files = input?.files
+  if (files) {
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const url = reader.result as string
+        recentUploads.value = [url, ...recentUploads.value].slice(0, 12)
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+  uploadPhotoImage(e)
+}
 
 const duplicateObjectFromList = async (obj: unknown) => {
   focusObject(obj as any)
