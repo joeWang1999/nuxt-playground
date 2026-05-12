@@ -47,7 +47,7 @@
           <!-- 近期上傳 -->
           <div v-if="recentUploads.length > 0" class="space-y-2">
             <p class="text-xs text-gray-400">近期上傳</p>
-            <div class="grid grid-cols-3 gap-1.5">
+            <div class="grid grid-cols-2 gap-1.5">
               <button
                 v-for="(url, i) in recentUploads"
                 :key="i"
@@ -56,7 +56,7 @@
               >
                 <img
                   :src="url"
-                  class="h-20 w-full object-cover transition group-hover:scale-105"
+                  class="aspect-square w-full object-cover transition group-hover:scale-105"
                 />
               </button>
             </div>
