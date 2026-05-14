@@ -166,9 +166,9 @@
           }"
         >
           <div
-            :class="isPinching ? 'will-change-transform' : 'transition-transform duration-200 ease-out will-change-transform'"
+            class="transition-transform duration-200 ease-out will-change-transform"
             :style="{
-              transform: `translate(${panX}px, ${panY}px) scale(${canvasScale})`,
+              transform: `scale(${canvasScale})`,
               transformOrigin: 'center',
               width: canvasInternalW + 'px',
               height: canvasInternalH + 'px',
@@ -259,7 +259,7 @@ import CanvasZoomControl from './CanvasZoomControl.vue'
 import ReviewExportModal from './ReviewExportModal.vue'
 import TextFloatingToolbar from './TextFloatingToolbar.vue'
 import TopToolbar from './TopToolbar.vue'
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import { useFabricCanvas } from '~/composables/useFabricCanvas'
 
 const activePanel = ref<string | null>(null)
@@ -418,86 +418,4 @@ const confirmExportPdf = async () => {
   await exportPDF()
   closeReviewModal()
 }
-
-// ── 手機兩指手勢：縮放 + 拖曳 ─────────────────────────────────
-const panX = ref(0)
-const panY = ref(0)
-const isPinching = ref(false)
-
-const MIN_SCALE = 0.2
-const MAX_SCALE = 3
-
-interface PinchState {
-  startDist: number
-  startScale: number
-  startMidX: number
-  startMidY: number
-  startPanX: number
-  startPanY: number
-}
-let pinchState: PinchState | null = null
-
-const getTouchDist = (t1: Touch, t2: Touch): number => {
-  const dx = t1.clientX - t2.clientX
-  const dy = t1.clientY - t2.clientY
-  return Math.sqrt(dx * dx + dy * dy)
-}
-
-const onTouchStart = (e: TouchEvent): void => {
-  if (e.touches.length === 2) {
-    const t1 = e.touches[0]!
-    const t2 = e.touches[1]!
-    isPinching.value = true
-    pinchState = {
-      startDist: getTouchDist(t1, t2),
-      startScale: canvasScale.value,
-      startMidX: (t1.clientX + t2.clientX) / 2,
-      startMidY: (t1.clientY + t2.clientY) / 2,
-      startPanX: panX.value,
-      startPanY: panY.value,
-    }
-  }
-}
-
-const onTouchMove = (e: TouchEvent): void => {
-  if (e.touches.length !== 2 || !pinchState) return
-  e.preventDefault()
-
-  const t1 = e.touches[0]!
-  const t2 = e.touches[1]!
-  const dist = getTouchDist(t1, t2)
-  const midX = (t1.clientX + t2.clientX) / 2
-  const midY = (t1.clientY + t2.clientY) / 2
-
-  const ratio = dist / pinchState.startDist
-  canvasScale.value = +Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchState.startScale * ratio)).toFixed(3)
-
-  panX.value = pinchState.startPanX + (midX - pinchState.startMidX)
-  panY.value = pinchState.startPanY + (midY - pinchState.startMidY)
-}
-
-const onTouchEnd = (e: TouchEvent): void => {
-  if (e.touches.length < 2) {
-    isPinching.value = false
-    pinchState = null
-  }
-}
-
-onMounted(() => {
-  const el = canvasContainerEl.value
-  if (!el) return
-  el.addEventListener('touchstart', onTouchStart, { passive: true })
-  el.addEventListener('touchmove', onTouchMove, { passive: false })
-  el.addEventListener('touchend', onTouchEnd, { passive: true })
-  el.addEventListener('touchcancel', onTouchEnd, { passive: true })
-})
-
-onUnmounted(() => {
-  const el = canvasContainerEl.value
-  if (!el) return
-  el.removeEventListener('touchstart', onTouchStart)
-  el.removeEventListener('touchmove', onTouchMove)
-  el.removeEventListener('touchend', onTouchEnd)
-  el.removeEventListener('touchcancel', onTouchEnd)
-})
 </script>
