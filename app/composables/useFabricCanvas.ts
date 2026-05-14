@@ -2006,7 +2006,86 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     }
 
     window.addEventListener('resize', onResize)
-    onUnmounted(() => window.removeEventListener('resize', onResize))
+
+    // 雙指縮放邏輯
+    let initialPinchDistance: number | null = null
+    let initialCanvasScale: number = 1
+
+    const getPinchDistance = (e: TouchEvent) => {
+      return Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      )
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.stopPropagation()
+        // e.preventDefault()
+        initialPinchDistance = getPinchDistance(e)
+        initialCanvasScale = canvasScale.value
+
+        if (canvas) {
+          // 強制關閉 Fabric 的選取框與拖曳行為
+          canvas.selection = false
+          // 發送 pointerup/mouseup 事件以中斷 Fabric 正在進行的單指動作
+          document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }))
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+        }
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.stopPropagation()
+        e.preventDefault() // 阻止預設的頁面滾動與縮放
+        
+        // 處理縮放
+        if (initialPinchDistance) {
+          const currentDistance = getPinchDistance(e)
+          const scaleChange = currentDistance / initialPinchDistance
+          let newScale = initialCanvasScale * scaleChange
+          newScale = Math.max(0.1, Math.min(newScale, 5))
+          canvasScale.value = newScale
+        }
+      }
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        initialPinchDistance = null
+        if (canvas) {
+          // 恢復 Fabric 選取框功能
+          canvas.selection = true
+        }
+      }
+    }
+
+    watch(canvasContainerEl, (newContainer, oldContainer) => {
+      if (oldContainer) {
+        oldContainer.removeEventListener('touchstart', onTouchStart, { capture: true } as any)
+        oldContainer.removeEventListener('touchmove', onTouchMove, { capture: true } as any)
+        oldContainer.removeEventListener('touchend', onTouchEnd, { capture: true } as any)
+        oldContainer.removeEventListener('touchcancel', onTouchEnd, { capture: true } as any)
+      }
+      if (newContainer) {
+        newContainer.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
+        newContainer.addEventListener('touchmove', onTouchMove, { capture: true, passive: false })
+        newContainer.addEventListener('touchend', onTouchEnd, { capture: true })
+        newContainer.addEventListener('touchcancel', onTouchEnd, { capture: true })
+      }
+    }, { immediate: true })
+
+    onUnmounted(() => {
+      window.removeEventListener('resize', onResize)
+      if (canvasContainerEl.value) {
+        const container = canvasContainerEl.value
+        container.removeEventListener('touchstart', onTouchStart, { capture: true } as any)
+        container.removeEventListener('touchmove', onTouchMove, { capture: true } as any)
+        container.removeEventListener('touchend', onTouchEnd, { capture: true } as any)
+        container.removeEventListener('touchcancel', onTouchEnd, { capture: true } as any)
+      }
+    })
   })
 
   // ============================================================
