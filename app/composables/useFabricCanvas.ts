@@ -291,14 +291,42 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
   // ============================================================
   // 內部 (internal) 尺寸 = Fabric 實際運算用的真實像素
   // 顯示 (display) 尺寸 = 縮放後呈現在畫面上的大小
+  const canvasTranslateX = ref<number>(0)
+  const canvasTranslateY = ref<number>(0)
   const canvasScale = ref<number>(1)
   const canvasInternalW = ref<number>(800)
   const canvasInternalH = ref<number>(500)
   const canvasDisplayW = ref<number>(800)
   const canvasDisplayH = ref<number>(500)
 
-  watch(canvasScale, () => {
+  watch([canvasScale, canvasTranslateX, canvasTranslateY], ([newScale]) => {
     requestAnimationFrame(() => updateObjectActionBarPosition())
+
+    if (canvasContainerEl.value) {
+      const containerW = canvasContainerEl.value.clientWidth
+      const containerH = canvasContainerEl.value.clientHeight
+      const scaledCanvasW = canvasInternalW.value * newScale
+      const scaledCanvasH = canvasInternalH.value * newScale
+      const EDGE_GAP = 40 // 畫布拖曳到極限時預留的間隙
+      const BOTTOM_MENU_GAP = 80 // 底部選單高度預留
+
+      if (scaledCanvasW <= containerW) {
+        if (canvasTranslateX.value !== 0) canvasTranslateX.value = 0
+      } else {
+        const maxTranslateX = (scaledCanvasW - containerW) / 2 + EDGE_GAP
+        const clampedX = Math.max(-maxTranslateX, Math.min(canvasTranslateX.value, maxTranslateX))
+        if (canvasTranslateX.value !== clampedX) canvasTranslateX.value = clampedX
+      }
+
+      if (scaledCanvasH <= containerH) {
+        if (canvasTranslateY.value !== 0) canvasTranslateY.value = 0
+      } else {
+        const maxTranslateYTop = (scaledCanvasH - containerH) / 2 + EDGE_GAP // 畫面向下拖曳極限
+        const maxTranslateYBottom = (scaledCanvasH - containerH) / 2 + EDGE_GAP + BOTTOM_MENU_GAP // 畫面向上拖曳極限(需避開底部選單)
+        const clampedY = Math.max(-maxTranslateYBottom, Math.min(canvasTranslateY.value, maxTranslateYTop))
+        if (canvasTranslateY.value !== clampedY) canvasTranslateY.value = clampedY
+      }
+    }
   })
 
   // PDF 匯出大小上限 (20MB)
@@ -2007,9 +2035,12 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
 
     window.addEventListener('resize', onResize)
 
-    // 雙指縮放邏輯
+    // 雙指縮放與拖曳邏輯
     let initialPinchDistance: number | null = null
     let initialCanvasScale: number = 1
+    let initialCenter: { x: number, y: number } | null = null
+    let initialTranslateX: number = 0
+    let initialTranslateY: number = 0
 
     const getPinchDistance = (e: TouchEvent) => {
       return Math.hypot(
@@ -2018,12 +2049,22 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
       )
     }
 
+    const getPinchCenter = (e: TouchEvent) => {
+      return {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+      }
+    }
+
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length >= 2) {
         e.stopPropagation()
         // e.preventDefault()
         initialPinchDistance = getPinchDistance(e)
         initialCanvasScale = canvasScale.value
+        initialCenter = getPinchCenter(e)
+        initialTranslateX = canvasTranslateX.value
+        initialTranslateY = canvasTranslateY.value
 
         if (canvas) {
           // 強制關閉 Fabric 的選取框與拖曳行為
@@ -2040,7 +2081,7 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
         e.stopPropagation()
         e.preventDefault() // 阻止預設的頁面滾動與縮放
         
-        // 處理縮放
+        // 1. 處理縮放 (先處理縮放以獲得最新比例)
         if (initialPinchDistance) {
           const currentDistance = getPinchDistance(e)
           const scaleChange = currentDistance / initialPinchDistance
@@ -2048,12 +2089,52 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
           newScale = Math.max(0.1, Math.min(newScale, 5))
           canvasScale.value = newScale
         }
+
+        // 2. 處理拖曳 (平移)
+        if (initialCenter) {
+          const currentCenter = getPinchCenter(e)
+          const deltaX = currentCenter.x - initialCenter.x
+          const deltaY = currentCenter.y - initialCenter.y
+          
+          let newTranslateX = initialTranslateX + deltaX
+          let newTranslateY = initialTranslateY + deltaY
+
+          // 獲取容器和畫布顯示尺寸來限制位移範圍
+          if (canvasContainerEl.value) {
+            const containerW = canvasContainerEl.value.clientWidth
+            const containerH = canvasContainerEl.value.clientHeight
+            const scaledCanvasW = canvasInternalW.value * canvasScale.value
+            const scaledCanvasH = canvasInternalH.value * canvasScale.value
+            const EDGE_GAP = 40 // 畫布拖曳到極限時預留的間隙
+            const BOTTOM_MENU_GAP = 80 // 底部選單高度預留
+
+            // 只有當縮放後的畫布大於容器時才允許位移
+            if (scaledCanvasW > containerW) {
+              const maxTranslateX = (scaledCanvasW - containerW) / 2 + EDGE_GAP
+              newTranslateX = Math.max(-maxTranslateX, Math.min(newTranslateX, maxTranslateX))
+            } else {
+              newTranslateX = 0
+            }
+
+            if (scaledCanvasH > containerH) {
+              const maxTranslateYTop = (scaledCanvasH - containerH) / 2 + EDGE_GAP
+              const maxTranslateYBottom = (scaledCanvasH - containerH) / 2 + EDGE_GAP + BOTTOM_MENU_GAP
+              newTranslateY = Math.max(-maxTranslateYBottom, Math.min(newTranslateY, maxTranslateYTop))
+            } else {
+              newTranslateY = 0
+            }
+          }
+
+          canvasTranslateX.value = newTranslateX
+          canvasTranslateY.value = newTranslateY
+        }
       }
     }
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) {
         initialPinchDistance = null
+        initialCenter = null
         if (canvas) {
           // 恢復 Fabric 選取框功能
           canvas.selection = true
@@ -2109,6 +2190,8 @@ export function useFabricCanvas(options: UseFabricCanvasOptions = {}) {
     redoStack,
     hasPersistedState,
     canvasScale,
+    canvasTranslateX,
+    canvasTranslateY,
     canvasInternalW,
     canvasInternalH,
     canvasDisplayW,

@@ -115,7 +115,7 @@
           <div
             class="transition-transform duration-200 ease-out will-change-transform"
             :style="{
-              transform: `scale(${canvasScale})`,
+              transform: `translate(${canvasTranslateX}px, ${canvasTranslateY}px) scale(${canvasScale})`,
               transformOrigin: 'center',
               width: canvasInternalW + 'px',
               height: canvasInternalH + 'px',
@@ -254,6 +254,8 @@ const {
   redoStack,
   hasPersistedState,
   canvasScale,
+  canvasTranslateX,
+  canvasTranslateY,
   canvasInternalW,
   canvasInternalH,
   canvasDisplayW,
