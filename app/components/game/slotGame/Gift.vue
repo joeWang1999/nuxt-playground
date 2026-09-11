@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" :class="['gift-container', displayType, { 'autoTurn': isRunning }]">
+  <div ref="rootEl" :class="['gift-container', { 'autoTurn': isRunning }]">
     <div
       :class="['gift', config.style]"
       v-for="(gift, index) in config.gifts"
@@ -33,7 +33,6 @@ const currentDeg = ref(0)
 const targetDeg = ref(0)
 const giftsDeg = ref([])
 
-const displayType = computed(() => (props.config.run3D ? 'three-dimension' : 'flat'))
 const rotate = computed(() => 360 / props.config.gifts.length)
 const translateZ = computed(() => (props.config.height / 2) / Math.tan((rotate.value / 2 / 180) * Math.PI))
 
@@ -50,7 +49,6 @@ function logGiftsDeg () {
 
 function setConfig () {
   // 將config的變數們寫入CSS變數中
-  rootEl.value.style.setProperty('--rotateY', `${props.config.rotateY}deg`)
   rootEl.value.style.setProperty('--duration', `${props.config.duration}ms`)
   rootEl.value.style.setProperty('--fontSize', `${props.config.fontSize}px`)
   rootEl.value.style.setProperty('--height', `${props.config.height}px`)
@@ -125,6 +123,7 @@ onMounted(() => {
   align-items: center;
   margin-right: var(--width);
   transform-style: preserve-3d;
+  transform: rotateX(var(--currentDeg));
 }
 .gift-container .gift {
   position: absolute;
@@ -133,27 +132,15 @@ onMounted(() => {
   justify-content: center;
   width: var(--width);
   height: var(--height);
-  border: 1px solid #333;
-  background-color: #fff;
   font-size: var(--fontSize);
+  background-image: url(/images/gift-bg.svg);
 }
 .gift-container .gift img {
   padding: 1px;
 }
 
-.gift-container.flat {
-  transform: rotateX(var(--currentDeg));
-}
-.gift-container.flat.autoTurn {
-  transition: var(--duration) ease-in-out;
-  transform: rotateX(var(--targetDeg));
-}
-
-.gift-container.three-dimension {
-  transform: rotateY(var(--rotateY)) rotateX(var(--currentDeg));
-}
-.gift-container.three-dimension.autoTurn {
+.gift-container.autoTurn {
   transition: var(--duration) cubic-bezier(0.1, 0, 0, var(--rollBackDeg));
-  transform: rotateY(var(--rotateY)) rotateX(var(--targetDeg));
+  transform: rotateX(var(--targetDeg));
 }
 </style>

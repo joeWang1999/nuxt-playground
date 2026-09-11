@@ -1,178 +1,204 @@
 <template>
-  <div id="DemoSlotMachine" ref="rootEl" @click.self="openResultHistory = false">
-    <div :class="['resultHistory', {'openResultHistory' : openResultHistory }]">
-      <div class="result" v-for="(result, index) in resultHistory" :key="index">{{ `Round${index + 1}: ${result}` }}</div>
+  <div class="slotMachineWrapper" >
+    <div
+      class="DemoSlotMachine"
+      ref="rootEl"
+      @click.self="openResultHistory = false"
+    >
+      <img class="slot_cover_image" src="/images/slot-cover.svg" alt="" />
+      <div class="slot_container">
+        <Gift
+          v-for="(config, index) in configs"
+          @finished="isFinished"
+          :trigger="trigger"
+          :config="config"
+          :key="index"
+        >
+        </Gift>
+      </div>
+      <!--  -->
     </div>
-    <!--  -->
-    <div class="container">
-      <Gift
-        v-for="(config, index) in configs"
-        @finished="isFinished"
-        :trigger="trigger"
-        :config="config"
-        :key="index">
-      </Gift>
-    </div>
-    <!--  -->
-    <div class="settings">
-      <button
-        class="btn"
-        @click="turn"
-        :disabled="disabled">
-        START
-      </button>
-      <button
-        class="btn"
-        @click="openResultHistory = true">
-        Result History
-      </button>
-      <input
-        type="checkbox"
-        class="displayType"
-        @change="changeDisplayMode"
-        :disabled="disabled">
-    </div>
-    <!--  -->
+    <button
+      class="handle"
+      :class="{ pulling: isPulling }"
+      @click="turn"
+      :disabled="disabled"
+    ></button>
   </div>
 </template>
 
 <script setup>
 import Gift from './Gift.vue'
 
+const props = defineProps({
+  /** 轉動時的音效檔 */
+  spinSound: {
+    type: String,
+    default: '/audio/slot-machine-spin.mp3'
+  },
+  /** 音效音量 0 ~ 1 */
+  spinVolume: {
+    type: Number,
+    default: 0.6
+  }
+})
+
 const rootEl = ref(null)
 const trigger = ref(null)
 const disabled = ref(false)
+const isPulling = ref(false)
+
+const gifts = [
+  { type: 'image', path: '/images/gift-0.svg', name: 'gift-0', value: '0' },
+  { type: 'image', path: '/images/gift-1.svg', name: 'gift-1', value: '1' },
+  { type: 'image', path: '/images/gift-2.svg', name: 'gift-2', value: '2' },
+  { type: 'image', path: '/images/gift-3.svg', name: 'gift-3', value: '3' },
+  { type: 'image', path: '/images/gift-4.svg', name: 'gift-4', value: '4' },
+]
 const configs = ref([
   {
-    run3D: false,
-    rotateY: -25,
     duration: 4000,
     rollback: 0.3,
     fontSize: 100,
-    height: 100,
-    width: 200,
-    gifts: Array.from(new Array(10), (val, index) => { return { type: 'text', name: index } })
+    height: 120,
+    width: 75,
+    gifts: gifts,
   },
   {
-    run3D: false,
-    rotateY: -25,
     duration: 5000,
     rollback: 0.3,
     fontSize: 100,
-    height: 100,
-    width: 200,
-    gifts: Array.from(new Array(10), (val, index) => { return { type: 'text', name: index } })
+    height: 120,
+    width: 75,
+    gifts: gifts,
   },
   {
-    run3D: false,
-    rotateY: -25,
     duration: 6000,
     rollback: 0.3,
     fontSize: 100,
-    height: 100,
-    width: 200,
-    gifts: Array.from(new Array(10), (val, index) => { return { type: 'text', name: index } })
-  }
+    height: 120,
+    width: 75,
+    gifts: gifts,
+  },
 ])
 const openResultHistory = ref(false)
 let result = []
 const resultHistory = ref([])
 
-function turn () {
+// ================================================================
+// 轉動音效：播放速度跟著滾輪角速度變化
+// ================================================================
+
+/** 音效播放速率的對應區間（滾輪停下前不會低於 MIN_RATE） */
+const MIN_RATE = 0.6
+const MAX_RATE = 2
+
+// preservesPitch: true → 只變快慢、音高不動
+// 想要減速時音調一起往下掉（拉霸機的經典聽感），把它改成 false
+const spinMusic = useMusic(() => props.spinSound, {
+  loop: true,
+  volume: props.spinVolume,
+  preservesPitch: true,
+  unlockOnInteraction: false
+})
+
+// 量測所有滾輪實際算繪出來的 rotateX 角速度
+const reelSpeed = useReelSpeed(
+  () => rootEl.value?.querySelectorAll('.gift-container')
+)
+
+// 角速度 0~1 → 播放速率
+watch(reelSpeed.normalized, (n) => {
+  spinMusic.setPlaybackRate(MIN_RATE + (MAX_RATE - MIN_RATE) * n)
+})
+
+function turn() {
   disabled.value = true
   trigger.value = new Date()
+  isPulling.value = true
+  setTimeout(() => {
+    isPulling.value = false
+  }, 1000)
+
+  // 起步先給滿速，避免第一幀還沒量到速度時聽起來是慢的。
+  // play() 必須在這個 click handler 內同步呼叫，前面不能有 await，
+  // 否則 Safari / iOS 會因為失去手勢上下文而擋掉播放。
+  spinMusic.setPlaybackRate(MAX_RATE)
+  spinMusic.play()
+  reelSpeed.start()
 }
 
-function isFinished (val) {
+function isFinished(val) {
   const autoTurnList = rootEl.value.querySelectorAll('.autoTurn')
   result.push(val)
   if (autoTurnList.length === 1) {
     disabled.value = false
     resultHistory.value.push(result)
     result = []
+    // 最後一個滾輪停了才收音效
+    reelSpeed.stop()
+    spinMusic.stop()
   }
-}
-
-function changeDisplayMode (e) {
-  configs.value.forEach(item => (item.run3D = e.target.checked))
 }
 </script>
 
 <style scoped>
-#DemoSlotMachine {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-}
-#DemoSlotMachine .container {
-  display: flex;
-}
-#DemoSlotMachine .settings {
-  display: flex;
-  align-items: center;
-  position: absolute;
-  bottom: 5vh;
-}
-#DemoSlotMachine .settings .btn {
-  margin-right: 20px;
-  padding: 15px 30px;
-  outline: none;
-  border: none;
-  border-radius: 10px;
-  background-color: #42b983;
-  color: #ffffff;
-  font-size: 16px;
-  cursor: pointer;
-  transition: 0.15s;
-  user-select: none;
-}
-#DemoSlotMachine .settings .btn:disabled {
-  background-color: #ddd;
-  cursor: not-allowed;
-}
-#DemoSlotMachine .settings .displayType {
+.slotMachineWrapper {
   position: relative;
+   width: 316px;
+  height: 434px;
+}
+.DemoSlotMachine {
+  gap: 16px;
+  background-image: url(/images/slot-bg.svg);
+  background-repeat: no-repeat;
+  background-size: contain;
+  width: 316px;
+  height: 434px;
+  position: relative;
+}
+.slot_cover_image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+}
+.slot_container {
   display: flex;
-  align-items: center;
+  flex-direction: row;
   justify-content: center;
-}
-#DemoSlotMachine .settings .displayType::after {
+  align-items: center;
+  gap: 8px;
+  top: 39%;
   position: absolute;
-  display: block;
-  left: 100%;
-  margin-left: 10px;
-  font-size: 16px;
-  content: '3D模式';
-  white-space: nowrap;
+  height: 120px;
+  left: 11.5%;
+  overflow: hidden;
 }
-#DemoSlotMachine .settings .displayType:disabled {
-  background-color: #ddd;
-  cursor: not-allowed;
-}
-#DemoSlotMachine .resultHistory {
+.handle {
+  background-image: url(/images/slot-handle.svg);
+  background-repeat: no-repeat;
+  background-size: contain;
+  height: 70px;
+  width: 28px;
+  transform-origin: bottom center;
   position: absolute;
-  transform: translateZ(99999px);
-  z-index: 999;
-  min-width: 300px;
-  height: 400px;
-  padding: 20px;
-  border: solid 5px #333;
-  border-radius: 30px;
-  background-color: #fff;
-  box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.4);
-  opacity: 0;
-  transition: 0.5s;
-  overflow-y: auto;
-  visibility: hidden;
+  bottom: 7.9%;
+  right: 20%;
+  z-index: 20;
 }
-#DemoSlotMachine .resultHistory .result {
-  padding: 15px;
-  list-style: none;
-  font-size: 30px;
+.handle.pulling {
+  animation: handlePull 1000ms ease-in-out;
 }
-#DemoSlotMachine .resultHistory.openResultHistory {
-  opacity: 1;
-  visibility: visible;
+@keyframes handlePull {
+  0% {
+    transform: rotateX(0deg);
+  }
+  60% {
+    transform: rotateX(180deg);
+  }
+  100% {
+    transform: rotateX(0deg);
+  }
 }
 </style>
