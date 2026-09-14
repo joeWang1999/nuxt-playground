@@ -34,9 +34,16 @@ export interface UseMusicOptions {
   loopGap?: number
 }
 
-/** 播放速度的合法範圍（瀏覽器普遍支援） */
-const MIN_RATE = 0.25
-const MAX_RATE = 4
+/**
+ * 播放速度的合法範圍。
+ * 這是保守值：各家瀏覽器在此區間內都還會正常輸出聲音，
+ * 再往外拉可能被靜音或出現嚴重失真。
+ */
+export const MIN_PLAYBACK_RATE = 0.25
+export const MAX_PLAYBACK_RATE = 4
+
+const MIN_RATE = MIN_PLAYBACK_RATE
+const MAX_RATE = MAX_PLAYBACK_RATE
 
 /** 淡入淡出的取樣間隔（毫秒），50ms 約 20fps，聽覺上已經平滑 */
 const FADE_TICK_MS = 50
@@ -439,7 +446,14 @@ export function useMusic(
   })
 
   watch(playbackRate, (value) => {
-    if (audio.value) audio.value.playbackRate = value
+    // 直接寫 ref（例如 v-model）會繞過 setPlaybackRate 的夾擠，這裡補上；
+    // 超出範圍就把 ref 修正回合法值，watch 會再跑一次真正套用
+    const safe = clamp(value, MIN_RATE, MAX_RATE)
+    if (safe !== value) {
+      playbackRate.value = safe
+      return
+    }
+    if (audio.value) audio.value.playbackRate = safe
   })
 
   watch(preservesPitch, (value) => {
