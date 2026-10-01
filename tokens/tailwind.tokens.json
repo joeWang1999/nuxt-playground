@@ -1,0 +1,47 @@
+{
+  "background": {
+    "primary": "var(--color-background-primary)",
+    "default": "var(--color-background-default)",
+    "base": "var(--color-background-base)"
+  },
+  "surface": {
+    "primary": "var(--color-surface-primary)",
+    "brand-subtle": "var(--color-surface-brand-subtle)",
+    "default": "var(--color-surface-default)",
+    "subtle": "var(--color-surface-subtle)",
+    "disabled": "var(--color-surface-disabled)"
+  },
+  "tag": {
+    "primary": {
+      "strong": "var(--color-tag-primary-strong)",
+      "default": "var(--color-tag-primary-default)",
+      "subtle": "var(--color-tag-primary-subtle)"
+    },
+    "secondary": {
+      "strong": "var(--color-tag-secondary-strong)",
+      "subtle": "var(--color-tag-secondary-subtle)"
+    }
+  },
+  "text": {
+    "brand": "var(--color-text-brand)",
+    "primary": "var(--color-text-primary)",
+    "secondary": "var(--color-text-secondary)",
+    "disabled": "var(--color-text-disabled)",
+    "inverse": "var(--color-text-inverse)",
+    "highlight": "var(--color-text-highlight)"
+  },
+  "icon": {
+    "primary": "var(--color-icon-primary)",
+    "secondary": "var(--color-icon-secondary)",
+    "disabled": "var(--color-icon-disabled)",
+    "inverse": "var(--color-icon-inverse)",
+    "brand": "var(--color-icon-brand)",
+    "highlight": "var(--color-icon-highlight)"
+  },
+  "border": {
+    "default": "var(--color-border-default)",
+    "subtle": "var(--color-border-subtle)",
+    "brand": "var(--color-border-brand)",
+    "inverse": "var(--color-border-inverse)"
+  }
+}

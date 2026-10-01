@@ -12,13 +12,13 @@
             <VolumeX v-else class="h-5 w-5" />
         </button>
 
-        <SlotGame></SlotGame>
+        <SlotGameFinal></SlotGameFinal>
     </div>
 </template>
 
 <script setup lang="ts">
 import { Volume2, VolumeX } from 'lucide-vue-next'
-import SlotGame from '~/components/game/slotGame/SlotGame.vue';
+import SlotGameFinal from '~/components/game/slotGame/SlotGameFinal.vue';
 import { useMusic } from '~/composables/useMusic'
 
 // 背景音樂參數全部在此設定

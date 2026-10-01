@@ -5,6 +5,7 @@
       <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
         <p class="text-sm font-semibold text-slate-800">Nuxt Playground</p>
         <div class="flex items-center gap-2">
+          <div class=" bg-surface-brand-subtle text-brand">test</div>
           <NuxtLink
             to="/"
             class="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
