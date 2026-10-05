@@ -3,10 +3,10 @@
  */
 
 :root {
-  --color-green-25: #f2fdee;
-  --color-green-50: #f2f5ed;
-  --color-green-100: #dff5d7;
-  --color-green-600: #007f44;
+  --color-violet-25: #fbeefd;
+  --color-violet-50: #dcb0ed;
+  --color-violet-100: #f59aec;
+  --color-violet-600: #6a007f;
   --color-orange-50: #fff1dc;
   --color-orange-600: #ff7300;
   --color-grey-100: #ffffff;
@@ -20,33 +20,16 @@
   --color-brown-500: #7f6333;
   --color-brown-600: #835300;
   --color-brown-800: #47310b;
-  --color-background-primary: var(--color-green-600);
-  --color-background-default: var(--color-green-50);
-  --color-background-base: var(--color-grey-100);
-  --color-surface-primary: var(--color-green-600);
-  --color-surface-brand-subtle: var(--color-green-100);
+  --color-background-default: var(--color-violet-50);
+  --color-surface-primary: var(--color-violet-600);
+  --color-surface-brand-subtle: var(--color-violet-50);
   --color-surface-default: var(--color-grey-100);
-  --color-surface-subtle: var(--color-grey-200);
-  --color-surface-disabled: var(--color-grey-400);
-  --color-tag-primary-strong: var(--color-green-600);
-  --color-tag-primary-default: var(--color-green-100);
-  --color-tag-primary-subtle: var(--color-green-25);
-  --color-tag-secondary-strong: var(--color-orange-600);
-  --color-tag-secondary-subtle: var(--color-orange-50);
-  --color-text-brand: var(--color-green-600);
+  --color-text-brand: var(--color-violet-600);
   --color-text-primary: var(--color-grey-800);
   --color-text-secondary: var(--color-grey-700);
-  --color-text-disabled: var(--color-grey-600);
   --color-text-inverse: var(--color-grey-100);
-  --color-text-highlight: var(--color-orange-600);
   --color-icon-primary: var(--color-grey-800);
-  --color-icon-secondary: var(--color-grey-700);
-  --color-icon-disabled: var(--color-grey-600);
-  --color-icon-inverse: var(--color-grey-100);
-  --color-icon-brand: var(--color-green-600);
-  --color-icon-highlight: var(--color-orange-600);
-  --color-border-default: var(--color-grey-600);
-  --color-border-subtle: var(--color-grey-400);
-  --color-border-brand: var(--color-green-600);
+  --color-icon-highlight: var(--color-violet-100);
+  --color-border-brand: var(--color-violet-600);
   --color-border-inverse: var(--color-grey-100);
 }
