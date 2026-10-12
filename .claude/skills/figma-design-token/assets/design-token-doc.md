@@ -11,7 +11,7 @@ Figma Variables
    │  Figma 外掛匯出 DTCG JSON
    ▼
 tokens/tokens.json                 ← 唯一需要更新的來源檔
-   │  npm run tokens
+   │  npm run tokens（先執行 scripts/validate-tokens.mjs 格式檢核，有錯誤就中斷）
    ▼
 <STYLE_OUT>tokens.css               CSS 變數（自動產生）
 <!-- 依路線保留其一 -->
@@ -24,6 +24,8 @@ tokens/tailwind.tokens.json         Tailwind v3 對應表（自動產生）
 | --- | --- | --- |
 | `tokens/tokens.json` | Figma 匯出的原始 token | 由 Figma 匯出後覆蓋 |
 | `style-dictionary.config.mjs` | 轉換規則與分類對應 | 需要調整規則時 |
+| `scripts/validate-tokens.mjs` | 建置前的格式檢核 | 一般不需要 |
+| `tokens/tokens-validation-report.md` | 檢核失敗時產生的報告（不 commit） | 自動產生 |
 | 上方標示「自動產生」的檔案 | 產出 | ❌ 不可，會被覆蓋 |
 
 ## 2. Token 結構
@@ -59,7 +61,7 @@ tokens/tailwind.tokens.json         Tailwind v3 對應表（自動產生）
 ## 4. Figma 更新後要做什麼
 
 1. 在 Figma 重新匯出 Variables（Primitive 與 Semantic collection 都要選），覆蓋 `tokens/tokens.json`。
-2. 執行 `npm run tokens`。
+2. 執行 `npm run tokens`。會先檢核格式，有錯誤時中斷，並產生 `tokens/tokens-validation-report.md`，列出出錯的行號、token 路徑與原因。修正後重新匯出，再執行一次。只想檢核時可執行 `npm run tokens:check`。
 3. 用 `git diff` 檢查產出檔的變化是否符合預期。
 4. 將 `tokens.json` 與產出檔一起 commit。
 
@@ -72,6 +74,7 @@ tokens/tailwind.tokens.json         Tailwind v3 對應表（自動產生）
 
 ## 5. 常見問題
 
-- **`npm run tokens` 出現 reference 錯誤**：Semantic 參照的 Primitive 不在 `tokens.json` 中，通常是匯出時漏選 collection。
+- **`npm run tokens` 檢核失敗**：打開 `tokens/tokens-validation-report.md`。「最上層沒有 X」通常是匯出時漏選了 collection，或 collection / mode 改名；「X 底下沒有 Y」通常是被參照的 Figma 變數被刪除或改名。請在 Figma 修正後重新匯出，不要手動修改 tokens.json。
+- **檢核出現「轉成 CSS 變數後同名」警告**：Figma 新增了 collection / mode，請調整設定中的 `PREFIXES`。
 - **出現「沒有對應到 Tailwind utility」的警告**：Figma 新增了分類，請在 `UTILITIES` 加上對應。
 - **變數名稱多了 collection 名稱**：Figma collection / mode 改名或換了匯出外掛，請調整設定中的 `PREFIXES`。

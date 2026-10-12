@@ -9,7 +9,7 @@ description: 在 Vue 3 / Nuxt 3 / Nuxt 4 專案中建置 Figma design token 流�
 
 ```
 Figma Variables ──(外掛匯出 DTCG JSON)──► tokens/tokens.json
-     ──(npm run tokens / Style Dictionary)──► tokens.css（CSS 變數）
+     ──(npm run tokens：先格式檢核，通過才執行 Style Dictionary)──► tokens.css（CSS 變數）
                                            ├► Tailwind：v3 JSON 或 v4 @theme CSS
                                            └► SCSS：_tokens.scss
 ```
@@ -19,10 +19,61 @@ Figma Variables ──(外掛匯出 DTCG JSON)──► tokens/tokens.json
 ## 附帶的檔案
 
 - `assets/style-dictionary.config.mjs`：Style Dictionary 設定模板。頂端「專案設定」區塊是唯一需要調整的地方。已實測可產出 CSS 變數、Tailwind v3 JSON、Tailwind v4 `@theme`、SCSS 變數。
+- `assets/validate-tokens.mjs`：建置前的 tokens.json 格式檢核腳本（不需安裝套件），見「格式檢核」。
 - `assets/tokens.sample.json`：範例 token。設計師還沒給檔案時，先用它把流程打通。
 - `assets/design-token-doc.md`：專案內說明文件的模板。
 - `references/tailwind.md`：Tailwind v3 / v4 的接線方式與驗證。走 Tailwind 路線時閱讀。
 - `references/css-scss.md`：一般 CSS、SCSS、Sass 的接線方式與驗證。走 CSS 路線時閱讀。
+
+## 格式檢核（兩條流程共用）
+
+兩條流程在執行 `npm run tokens` 之前都要先檢核 tokens.json。Figma 外掛的匯出結果常有漏選 collection、參照斷掉等問題，Style Dictionary 遇到時只會丟出一段難讀的錯誤，或者更糟：建置成功，但默默產出錯誤的變數。
+
+### 安裝檢核腳本
+
+專案的 `package.json` 還沒有 `tokens:check` script 時（首次建置，或是在加入檢核之前建好的專案），先安裝：
+
+1. 複製 `assets/validate-tokens.mjs` 到專案的 `scripts/validate-tokens.mjs`。
+2. `package.json` 的 scripts 改成這樣，讓 `npm run tokens` 本身就會先檢核，檢核失敗時 `&&` 後面的建置就不會執行：
+
+   ```json
+   "tokens:check": "node scripts/validate-tokens.mjs",
+   "tokens": "node scripts/validate-tokens.mjs && style-dictionary build --config style-dictionary.config.mjs"
+   ```
+
+3. 在 `.gitignore` 加上 `tokens/tokens-validation-report.md`（報告是暫時的，不要 commit）。
+
+腳本會讀取 `style-dictionary.config.mjs` 的 `source` 和命名規則，所以多 mode、多個來源檔也能一起檢核（跨檔參照會一併檢查）。
+
+### 執行與判斷
+
+```bash
+npm run tokens:check
+```
+
+| 結果 | 代表 | 處理方式 |
+| --- | --- | --- |
+| `✔ tokens 檢核通過`（exit 0） | 沒有問題 | 繼續執行 `npm run tokens` |
+| 只有 `⚠` 警告（exit 0） | 建置會成功，但產出可能不正確 | 繼續流程，把警告列入最後的回報 |
+| 有 `✖` 錯誤（exit 1） | 執行 `npm run tokens` 一定會失敗 | **中斷流程**，見下方 |
+
+檢核項目：
+
+- **錯誤**：檔案不存在、JSON 語法錯誤（會指出行號與欄位）、參照找不到 token（指向不存在的路徑，或是指向群組而不是 token）、循環參照、名稱含 `{` 或 `}`。
+- **警告**：轉成 CSS 變數後名稱重複（通常是 `PREFIXES` 沒有涵蓋新的 collection / mode）、`$type: color` 但值不是有效的顏色、`$value` 是空的、token 底下又有子 token、名稱含 `.`、同一路徑重複定義、檔案裡沒有任何 token。
+
+這些分類都已經用 Style Dictionary 5 實測過：錯誤類會讓建置失敗，警告類會建置成功，但產出錯誤的 CSS。
+
+### 檢核失敗時（有錯誤）
+
+1. 停止流程：不要執行 `npm run tokens`、不要修改任何程式碼或設定檔，也不要進行後續步驟。
+2. 不要直接修改 `tokens.json` 來繞過錯誤。這個檔案下次從 Figma 匯出時就會被覆蓋，問題應該在 Figma 端修正。
+3. 檢核報告已產生在 `tokens/tokens-validation-report.md`，內容包括每個問題的檔案行號、token 路徑、原因，以及對參照錯誤的提示（例如「`Primitive` 底下沒有 `Light`，現有的是 `Primitive`」）。把報告路徑和錯誤摘要告訴使用者，並說明可能的原因：
+   - 參照的最上層名稱不存在 → 匯出時漏選了 collection，或 collection / mode 改了名稱。
+   - 路徑大致正確，但最後幾層對不上 → Figma 刪除或改名了被參照的變數。
+   - JSON 語法錯誤 → 檔案沒有完整複製，或被手動編輯過。
+4. 例外：錯誤明顯是因為 Figma 的 collection / mode 改名，而且需要調整 `style-dictionary.config.mjs`（例如 `PREFIXES`）時，可以向使用者提議修改設定。修改前先徵得同意；tokens.json 本身的參照錯誤還是要由 Figma 修正。
+5. 請使用者修正並重新匯出後，再呼叫一次這個 skill，從頭開始流程。
 
 ## 先判斷：首次建置還是更新
 
@@ -44,7 +95,7 @@ Figma Variables ──(外掛匯出 DTCG JSON)──► tokens/tokens.json
 
 ### U2. 保存舊的產出檔
 
-執行 `npm run tokens` 之前，先保存目前的產出檔，供 U4 比對：
+執行 `npm run tokens` 之前，先保存目前的產出檔，供 U5 比對：
 
 - 專案有 git 且產出檔已 commit → 不需另存，之後用 `git diff` 比對即可。
 - 否則把 `tokens.css`（以及 `tailwind-theme.css` / `tailwind.tokens.json` / `_tokens.scss`，看專案有哪些）複製到暫存目錄。
@@ -59,7 +110,14 @@ Figma Variables ──(外掛匯出 DTCG JSON)──► tokens/tokens.json
 
 結構有變時先調整設定，再進行下一步。
 
-### U4. 重新產生並比對差異
+### U4. 格式檢核（必要，不可跳過）
+
+依「格式檢核」執行 `npm run tokens:check`（專案還沒有這個 script 時先安裝）。
+
+- 有錯誤 → 依「檢核失敗時」中斷流程並回報，不要繼續 U5 之後的步驟。
+- 通過或只有警告 → 繼續 U5，警告列入 U9 的回報。
+
+### U5. 重新產生並比對差異
 
 ```bash
 npm run tokens
@@ -71,7 +129,7 @@ npm run tokens
 - **新增**的 token。
 - **值改變**的 token（例如參照的 Primitive 換了）。
 
-### U5. 找出程式碼中失效的用法
+### U6. 找出程式碼中失效的用法
 
 在原始碼中（`src/`、`app/`、`components/`、`pages/` 等，看專案結構）搜尋每個被刪除的 token：Tailwind class、`var(--color-...)`、SCSS `$color-...`。被刪除的 class 不會讓建置失敗，只會讓樣式默默失效，所以這一步不能省。
 
@@ -80,7 +138,7 @@ npm run tokens
 - 新 token 中有明顯的替代（例如只是改名，或同用途的新 token）→ 直接替換，並在回報中列出。
 - 沒有明確替代 → 詢問使用者要怎麼處理（例如改用某個現有 token、先拿掉該樣式、請設計師補 token）。不要自己改用 Primitive 變數或寫死色碼。
 
-### U6. 檢查新 token 的設計問題
+### U7. 檢查新 token 的設計問題
 
 快速檢查並在回報時提出（不需要自己修）：
 
@@ -88,18 +146,18 @@ npm run tokens
 - Primitive 色階明顯錯誤（例如 `50` 比 `100` 深）。
 - 元件需要但新 token 中缺少的類型（例如沒有中性邊框色）。
 
-### U7. 更新文件並驗證
+### U8. 更新文件並驗證
 
 - 更新 `docs/design-token.md` 中的 class / 變數範例與分類對應表，移除已刪除的 token。
 - `npm run build` 成功，並在輸出 CSS 中確認新 token 的 class / 變數存在、已刪除的不再被引用。
 
-### U8. 回報
+### U9. 回報
 
 告訴使用者：
 
 - Figma 這次的變更摘要（刪除 / 新增 / 值改變的 token）。
 - 程式碼中替換了哪些用法，哪些依使用者決定處理。
-- U6 發現的設計問題，可以回報給設計師。
+- U7 發現的設計問題，以及 U4 的檢核警告，可以回報給設計師。
 - 提醒把 `tokens.json` 與產出檔一起 commit。
 
 ## 首次建置流程
@@ -153,15 +211,21 @@ npm i -D style-dictionary
 - Semantic 的參照（`{Primitive.Primitive.color.grey.800}`）都能在檔案裡找到對應的 Primitive。外掛匯出時漏選 collection 是常見問題，會讓建置時出現 reference 錯誤。
 - 有沒有多個 mode（例如 Light / Dark 各一份）或非顏色 token（Figma 的 number 變數）。見下方「進階情況」。
 
-### 5. 加入 npm script 並產生檔案
+### 5. 加入 npm script、格式檢核，再產生檔案
 
-`package.json`：
+依「格式檢核」安裝檢核腳本，`package.json` 會有：
 
 ```json
 "scripts": {
-  "tokens": "style-dictionary build --config style-dictionary.config.mjs"
+  "tokens:check": "node scripts/validate-tokens.mjs",
+  "tokens": "node scripts/validate-tokens.mjs && style-dictionary build --config style-dictionary.config.mjs"
 }
 ```
+
+先執行 `npm run tokens:check`：
+
+- 有錯誤 → 依「檢核失敗時」中斷流程並回報。使用者提供的 Figma JSON 有錯時，不要改用範例 token 繼續建置。
+- 通過或只有警告 → 執行：
 
 ```bash
 npm run tokens
@@ -186,7 +250,7 @@ npm run tokens
 
 不要只看產出檔就宣告完成，實際建置一次：
 
-1. `npm run tokens` 沒有錯誤或未對應分類的警告。
+1. `npm run tokens:check` 通過，`npm run tokens` 沒有錯誤或未對應分類的警告。
 2. 在一個元件中使用幾個 token（Tailwind：`text-primary bg-surface-default border-brand`；CSS：`var(--color-text-primary)` 或 `$color-text-primary`）。若專案沒有適合的地方，可以暫時加在首頁，驗證後詢問使用者是否保留。
 3. `npm run build` 成功，並在輸出的 CSS 中找到對應的 class 或變數（細節見各 reference 的「驗證」）。
 
@@ -199,9 +263,10 @@ npm run tokens
 告訴使用者：
 
 - 新增 / 修改了哪些檔案，哪些是自動產生、不可手動修改的。
+- `npm run tokens` 會先自動檢核格式，失敗時報告在 `tokens/tokens-validation-report.md`。
 - 可以使用的 class 或變數範例。
 - 若使用範例 token：提醒之後要用 Figma 匯出檔覆蓋 `tokens/tokens.json` 後再執行 `npm run tokens`。
-- 驗證時發現但未處理的問題（例如缺少的參照、未對應的分類）。
+- 驗證時發現但未處理的問題（例如格式檢核的警告、未對應的分類）。
 
 產出檔（`tokens.css`、`tailwind.tokens.json` / `tailwind-theme.css`、`_tokens.scss`）建議連同 `tokens.json` 一起 commit，這樣其他人不用先執行 `npm run tokens` 也能啟動專案。
 
